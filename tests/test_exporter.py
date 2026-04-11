@@ -6,6 +6,7 @@ We DO NOT invoke real DCE. Instead we stub ConfigManager to return a token
 and a path to a fake DCE script created by the `fake_dce` fixture.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -157,6 +158,11 @@ class TestConfigurationGuards:
         with pytest.raises(DCENotFoundError):
             ex._get_dce_path()
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="Windows has no POSIX +x bit; os.access(..., X_OK) returns True "
+               "for any regular file so this guard only fires on POSIX.",
+    )
     def test_non_executable_dce_raises(self, isolated_home, tmp_path):
         dce = tmp_path / "not_executable"
         dce.write_text("x")
