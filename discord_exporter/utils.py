@@ -1,16 +1,38 @@
 """
 Utility functions for Discord Exporter.
 
-Includes URL parsing, filename generation, and validation helpers.
+This module groups pure, dependency-free helpers used by both the CLI and
+GUI frontends. It intentionally contains no subprocess or network calls so
+it can be exercised from unit tests without stubbing.
+
+Public surface area:
+
+- Streaming log events: ``LogLevel``, ``LogEvent``, ``LogCallback``,
+  ``default_log_callback``.
+- Format resolution: ``ExportFormat`` (with ``from_string`` alias map).
+- Discord URL parsing: ``parse_discord_url``, ``parse_discord_url_extended``,
+  ``ParsedDiscordUrl``.
+- Snowflake + date validation: ``validate_channel_id``, ``validate_guild_id``,
+  ``parse_date``, ``validate_date_range``.
+- Filesystem helpers: ``generate_output_filename``,
+  ``generate_guild_output_filename``, ``validate_output_directory``,
+  ``validate_dce_executable``.
+- Error sanitization: ``sanitize_error_message``, ``parse_dce_error``,
+  ``get_error_solution``.
+- Post-processing: ``convert_json_to_markdown``, ``cleanup_avatar_emoji_files``,
+  ``parse_channel_list``, ``group_channels_by_category``.
+
+Security note: ``sanitize_error_message`` is the single choke point for
+token redaction in log output. All DCE subprocess output must flow through
+it before being stored, displayed, or re-raised as an exception message.
 """
 
 import re
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, Tuple, Callable
-from enum import Enum
 from dataclasses import dataclass
-
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Callable, Optional
 
 # =============================================================================
 # Log Event Types (for GUI/CLI streaming)
@@ -135,7 +157,7 @@ class ParsedDiscordUrl:
     channel_id: Optional[str] = None
     thread_id: Optional[str] = None
 
-    def get_export_target(self) -> Tuple[str, str]:
+    def get_export_target(self) -> tuple[str, str]:
         """
         Determine export target type and ID.
 
@@ -278,7 +300,7 @@ def parse_discord_url_extended(url: str) -> ParsedDiscordUrl:
     )
 
 
-def parse_discord_url(url: str) -> Tuple[Optional[str], Optional[str]]:
+def parse_discord_url(url: str) -> tuple[Optional[str], Optional[str]]:
     """
     Parse a Discord channel URL to extract guild ID and channel ID.
 
@@ -403,7 +425,10 @@ def generate_guild_output_filename(
         The output directory path (files will be named by DCE).
     """
     timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    extension = export_format.get_extension()
+    # Note: DCE writes files named by its own pattern inside this directory,
+    # so we don't need the format extension here — it's provided by the caller
+    # via -o when building the DCE command. Parameter retained for API stability.
+    _ = export_format  # intentionally unused in filename generation
 
     if output_dir:
         output_dir = Path(output_dir)
@@ -464,7 +489,7 @@ def parse_date(date_str: str) -> str:
     )
 
 
-def validate_date_range(after: Optional[str], before: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+def validate_date_range(after: Optional[str], before: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     """
     Validate and parse a date range.
 
@@ -503,7 +528,7 @@ def validate_date_range(after: Optional[str], before: Optional[str]) -> Tuple[Op
     return parsed_after, parsed_before
 
 
-def validate_output_directory(path: str) -> Tuple[bool, str]:
+def validate_output_directory(path: str) -> tuple[bool, str]:
     """
     Validate output directory, creating if necessary.
 
@@ -514,7 +539,6 @@ def validate_output_directory(path: str) -> Tuple[bool, str]:
         Tuple of (is_valid, error_message).
         error_message is empty if valid.
     """
-    import os
 
     if not path or not path.strip():
         return True, ""  # Empty means use CWD
@@ -560,7 +584,7 @@ def validate_output_directory(path: str) -> Tuple[bool, str]:
         return False, f"폴더 접근 오류: {e}"
 
 
-def validate_dce_executable(path: str) -> Tuple[bool, str]:
+def validate_dce_executable(path: str) -> tuple[bool, str]:
     """
     Validate DCE executable path and permissions.
 
@@ -639,7 +663,7 @@ def sanitize_error_message(message: str, token: Optional[str] = None) -> str:
     return sanitized
 
 
-def parse_dce_error(message: str) -> Tuple[str, str]:
+def parse_dce_error(message: str) -> tuple[str, str]:
     """
     Parse DCE error message and return user-friendly description.
 
@@ -794,15 +818,33 @@ def get_error_solution(error_type: str) -> str:
 
 def convert_json_to_markdown(json_path: Path, md_path: Path) -> None:
     """
-    Convert DCE JSON export to Obsidian-compatible Markdown.
+    Convert a DCE JSON export into Obsidian-friendly Markdown.
+
+    The output uses:
+    - ``# channel`` as page title, with server/topic as bold metadata
+    - ``## YYYY-MM-DD`` date headers (one per calendar day in channel timezone)
+    - ``### author (HH:MM)`` subheadings for each message
+    - Obsidian image embeds (``![](url)``) for image attachments
+    - Regular Markdown links for non-image attachments
+    - ``> **title**`` block quotes for Discord embeds
+    - Italic ``*반응: emoji(count)*`` for reactions
+
+    The conversion is best-effort: missing fields fall back to "Unknown" so
+    partial exports still render.
 
     Args:
         json_path: Path to the JSON file from DCE export.
-        md_path: Path for the output Markdown file.
+        md_path: Path for the output Markdown file. Will be overwritten if
+                 it exists.
+
+    Raises:
+        FileNotFoundError: If ``json_path`` does not exist.
+        json.JSONDecodeError: If the JSON file is malformed.
+        OSError: If ``md_path`` cannot be written (permissions, full disk).
     """
     import json
 
-    with open(json_path, 'r', encoding='utf-8') as f:
+    with open(json_path, encoding='utf-8') as f:
         data = json.load(f)
 
     lines = []
@@ -1012,7 +1054,7 @@ def cleanup_avatar_emoji_files(
     log_callback: Optional[LogCallback] = None,
     delete_avatars: bool = True,
     delete_emojis: bool = True
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Delete avatar and emoji files from media directory after export.
 
@@ -1031,9 +1073,7 @@ def cleanup_avatar_emoji_files(
     Returns:
         Tuple of (avatars_deleted, emojis_deleted).
     """
-    import json
     import hashlib
-    import os
 
     def log(msg: str, level: str = "INFO"):
         if log_callback:
@@ -1060,7 +1100,7 @@ def cleanup_avatar_emoji_files(
     def get_dce_filename(url: str) -> Optional[str]:
         """Calculate the filename DCE would use for a given URL."""
         try:
-            from urllib.parse import urlparse, parse_qs, urlencode
+            from urllib.parse import parse_qs, urlencode, urlparse
 
             parsed = urlparse(url)
             path = parsed.path

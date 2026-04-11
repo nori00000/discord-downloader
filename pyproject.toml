@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "discord-exporter"
-version = "1.0.0"
+version = "1.1.0"
 description = "A CLI wrapper for DiscordChatExporter.Cli - Export Discord chat logs easily"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     {name = "Discord Exporter"}
 ]
@@ -20,11 +20,11 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Communications :: Chat",
     "Topic :: Utilities",
 ]
@@ -36,6 +36,7 @@ dependencies = []
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "ruff>=0.5.0",
 ]
 
 [project.scripts]
@@ -51,3 +52,41 @@ Repository = "https://github.com/your-username/discord-exporter"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["discord_exporter*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = [
+    "guild-*",
+    "channel-*",
+    "down file",
+    "*_Files",
+    "build",
+    "dist",
+    ".claude",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (long Korean error messages are intentional)
+    "B008",  # function calls in defaults — used for dataclass defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # allow assert False in tests
+"discord_exporter/gui.py" = ["E722"]  # bare excepts around tk threading

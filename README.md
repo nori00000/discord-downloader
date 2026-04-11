@@ -1,14 +1,17 @@
 # Discord Exporter
 
-[DiscordChatExporter.Cli](https://github.com/Tyrrrz/DiscordChatExporter)를 쉽게 사용하기 위한 크로스 플랫폼 CLI 래퍼 도구입니다.
+![CI](https://github.com/nori00000/discord-exporter/actions/workflows/test.yml/badge.svg)
+
+[DiscordChatExporter.Cli](https://github.com/Tyrrrz/DiscordChatExporter)를 쉽게 사용하기 위한 크로스 플랫폼 CLI/GUI 래퍼 도구입니다.
 
 ## 주요 기능
 
 - Discord 채널 URL 또는 채널 ID로 채팅 로그 내보내기
-- 다양한 출력 형식 지원 (HTML, TXT, JSON, CSV)
-- 날짜 범위 지정 내보내기
-- 서버 전체 / DM 전체 내보내기
-- 토큰 안전 저장 (로컬 전용, 외부 전송 없음)
+- 다양한 출력 형식: HTML, TXT, JSON, CSV, **Markdown (Obsidian 호환)**
+- 날짜 범위 지정 내보내기 (단일 채널/서버/DM)
+- 서버 전체(guild) / DM 전체 일괄 내보내기
+- 토큰 안전 저장 (로컬 파일, `chmod 600`, 외부 전송 없음)
+- GUI (tkinter) / CLI 두 가지 인터페이스
 - macOS (Apple Silicon) 및 Windows 지원
 
 ## 사전 요구사항
@@ -217,6 +220,12 @@ discord-exporter list-dm
 | `txt` | 일반 텍스트 | `.txt` |
 | `json` | JSON 형식 | `.json` |
 | `csv` | CSV 형식 | `.csv` |
+| `md` / `markdown` | Markdown (Obsidian 호환) | `.md` |
+| `obsidian` | `md`의 별칭 — Obsidian Vault에 바로 드롭 | `.md` |
+
+Markdown 내보내기는 내부적으로 DCE의 JSON 익스포트를 돌린 뒤 이미지 임베드,
+서버/채널 헤더, 날짜별 섹션, 반응(reaction) 각주를 포함한 Obsidian-friendly
+구조로 변환합니다.
 
 ## 명령어 옵션
 
@@ -287,10 +296,39 @@ discord-exporter setup
 
 ## 보안
 
-- 토큰은 로컬 설정 파일에만 저장됩니다
-- 외부 서버로 토큰이 전송되지 않습니다
-- 에러 메시지에 토큰이 노출되지 않도록 마스킹됩니다
-- 설정 파일에 적절한 권한 설정을 권장합니다
+토큰 처리는 가능한 한 보수적으로 설계되어 있습니다:
+
+- **로컬 저장 전용.** 토큰은 `~/.discord-exporter/{config.json, .env}`에만
+  기록되며, 외부 서비스로 전송되는 일은 없습니다. 네트워크 호출은 전부 DCE
+  서브프로세스를 통해서만 발생합니다.
+- **`chmod 0600` 자동 적용.** 설정 파일은 저장 즉시 소유자만 읽고 쓸 수 있게
+  권한이 조여지며, 이전 버전에서 만들어진 world-readable 파일은 `ConfigManager`
+  생성 시점에 자동으로 마이그레이션됩니다. (Windows에서는 POSIX 퍼미션 대신
+  사용자 프로필 디렉토리의 ACL에 의존합니다.)
+- **에러/로그 마스킹.** 모든 서브프로세스 출력은 `utils.sanitize_error_message`를
+  통과해 Discord 토큰 패턴(`<TOKEN>`)으로 치환된 뒤에만 로그/예외에 기록됩니다.
+  GUI의 상태바는 토큰 실값 대신 `✓ 설정됨` 상태 표시만 보여줍니다.
+- **토큰 표시 규칙.** 대화형 입력은 `getpass` 사용, 설정 요약에는 `mask_token()`이
+  적용한 `xxxx...xxxx` 형식만 노출됩니다.
+
+의심스러운 노출이 있었다면 Discord 비밀번호를 변경해 기존 토큰을 무효화한 뒤
+`discord-exporter setup`으로 새 토큰을 등록하는 것을 권장합니다.
+
+## 개발 / 테스트
+
+```bash
+# dev 의존성과 함께 editable 설치
+pip install -e ".[dev]"
+
+# 린트
+ruff check discord_exporter/ tests/
+
+# 테스트
+pytest
+```
+
+CI는 Linux + macOS 매트릭스(Py 3.9 – 3.13)와 Windows smoke 잡으로 구성되어
+있습니다 — `.github/workflows/test.yml` 참고.
 
 ## 라이선스
 
