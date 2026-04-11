@@ -6,26 +6,26 @@ A cross-platform tool to easily export Discord chat logs.
 """
 
 import argparse
-import sys
 import getpass
+import sys
 from pathlib import Path
 from typing import Optional
 
 from . import __version__
 from .config import ConfigManager
 from .exporter import (
-    Exporter,
-    ExportOptions,
-    ExportError,
     DCENotFoundError,
+    Exporter,
+    ExportError,
+    ExportOptions,
     TokenNotConfiguredError,
 )
 from .utils import (
     ExportFormat,
+    parse_date,
     parse_discord_url,
     validate_channel_id,
     validate_guild_id,
-    parse_date,
 )
 
 
@@ -159,7 +159,6 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     # Determine channel ID
     channel_id: Optional[str] = None
-
     if args.url:
         try:
             _, channel_id = parse_discord_url(args.url)
@@ -176,41 +175,13 @@ def cmd_export(args: argparse.Namespace) -> int:
         print_error("--url 또는 --channel-id 중 하나를 지정해야 합니다.")
         return 1
 
-    # Parse format
     try:
-        export_format = ExportFormat.from_string(args.format)
+        options = parse_common_export_options(args)
     except ValueError as e:
         print_error(str(e))
         return 1
+    options.channel_id = channel_id
 
-    # Parse dates
-    after = None
-    before = None
-    if args.after:
-        try:
-            after = parse_date(args.after)
-        except ValueError as e:
-            print_error(str(e))
-            return 1
-    if args.before:
-        try:
-            before = parse_date(args.before)
-        except ValueError as e:
-            print_error(str(e))
-            return 1
-
-    # Build options
-    options = ExportOptions(
-        channel_id=channel_id,
-        export_format=export_format,
-        output_dir=Path(args.output_dir) if args.output_dir else None,
-        after=after,
-        before=before,
-        media=args.media,
-        include_threads=args.include_threads,
-    )
-
-    # Run export
     try:
         exporter = Exporter(config)
         output_path = exporter.export_channel(options)
@@ -226,9 +197,7 @@ def cmd_exportguild(args: argparse.Namespace) -> int:
     config = ConfigManager()
     ensure_configured(config)
 
-    # Determine guild ID
     guild_id: Optional[str] = None
-
     if args.url:
         try:
             guild_id, _ = parse_discord_url(args.url)
@@ -248,41 +217,13 @@ def cmd_exportguild(args: argparse.Namespace) -> int:
         print_error("--url 또는 --guild-id 중 하나를 지정해야 합니다.")
         return 1
 
-    # Parse format
     try:
-        export_format = ExportFormat.from_string(args.format)
+        options = parse_common_export_options(args)
     except ValueError as e:
         print_error(str(e))
         return 1
+    options.guild_id = guild_id
 
-    # Parse dates
-    after = None
-    before = None
-    if args.after:
-        try:
-            after = parse_date(args.after)
-        except ValueError as e:
-            print_error(str(e))
-            return 1
-    if args.before:
-        try:
-            before = parse_date(args.before)
-        except ValueError as e:
-            print_error(str(e))
-            return 1
-
-    # Build options
-    options = ExportOptions(
-        guild_id=guild_id,
-        export_format=export_format,
-        output_dir=Path(args.output_dir) if args.output_dir else None,
-        after=after,
-        before=before,
-        media=args.media,
-        include_threads=args.include_threads,
-    )
-
-    # Run export
     try:
         exporter = Exporter(config)
         output_path = exporter.export_guild(options)
@@ -298,39 +239,15 @@ def cmd_exportdm(args: argparse.Namespace) -> int:
     config = ConfigManager()
     ensure_configured(config)
 
-    # Parse format
     try:
-        export_format = ExportFormat.from_string(args.format)
+        options = parse_common_export_options(args)
     except ValueError as e:
         print_error(str(e))
         return 1
+    # DM channels have no threads; drop include_threads even if the user
+    # passed it, to match legacy behavior and avoid a DCE error.
+    options.include_threads = None
 
-    # Parse dates
-    after = None
-    before = None
-    if args.after:
-        try:
-            after = parse_date(args.after)
-        except ValueError as e:
-            print_error(str(e))
-            return 1
-    if args.before:
-        try:
-            before = parse_date(args.before)
-        except ValueError as e:
-            print_error(str(e))
-            return 1
-
-    # Build options
-    options = ExportOptions(
-        export_format=export_format,
-        output_dir=Path(args.output_dir) if args.output_dir else None,
-        after=after,
-        before=before,
-        media=args.media,
-    )
-
-    # Run export
     try:
         exporter = Exporter(config)
         output_path = exporter.export_dm(options)
@@ -408,12 +325,25 @@ def cmd_list_dm(args: argparse.Namespace) -> int:
         return 1
 
 
+# Formats accepted by `-f/--format`. These are the user-facing strings;
+# ExportFormat.from_string() resolves aliases and case-insensitivity, so we
+# keep this list for argparse help/tab completion without restricting it.
+CLI_FORMATS = [
+    'html', 'html-dark', 'html-light',
+    'txt', 'json', 'csv',
+    'md', 'obsidian',
+]
+
+
 def add_common_export_args(parser: argparse.ArgumentParser) -> None:
     """Add common export arguments to a parser."""
     parser.add_argument(
         '-f', '--format',
         default='html',
-        help='출력 형식: html, html-dark, html-light, txt, json, csv (기본값: html)'
+        help=(
+            '출력 형식: ' + ', '.join(CLI_FORMATS) +
+            ' (기본값: html, md/obsidian은 Obsidian-friendly Markdown)'
+        ),
     )
     parser.add_argument(
         '-o', '--output-dir',
@@ -436,6 +366,30 @@ def add_common_export_args(parser: argparse.ArgumentParser) -> None:
         '--include-threads',
         choices=['none', 'active', 'all'],
         help='스레드 포함 여부: none, active, all'
+    )
+
+
+def parse_common_export_options(args: argparse.Namespace) -> ExportOptions:
+    """
+    Parse shared export options (format + date range + output_dir + media)
+    from argparse into an ExportOptions instance.
+
+    Raises:
+        ValueError: If format or date strings are invalid. The caller is
+                    responsible for catching and printing the error.
+    """
+    export_format = ExportFormat.from_string(args.format)
+
+    after = parse_date(args.after) if args.after else None
+    before = parse_date(args.before) if args.before else None
+
+    return ExportOptions(
+        export_format=export_format,
+        output_dir=Path(args.output_dir) if args.output_dir else None,
+        after=after,
+        before=before,
+        media=args.media,
+        include_threads=getattr(args, 'include_threads', None),
     )
 
 
