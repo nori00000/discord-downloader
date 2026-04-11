@@ -5,10 +5,10 @@ Handles token storage, DCE path configuration, and environment variables.
 Tokens are stored locally and never transmitted externally.
 """
 
-import os
 import json
+import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 
 class ConfigManager:
@@ -27,7 +27,7 @@ class ConfigManager:
         self._config_dir = self._get_config_dir()
         self._config_file = self._config_dir / self.CONFIG_FILE_NAME
         self._env_file = self._config_dir / self.ENV_FILE_NAME
-        self._config: Dict[str, Any] = {}
+        self._config: dict[str, Any] = {}
         self._load_config()
 
     def _get_config_dir(self) -> Path:
@@ -42,22 +42,30 @@ class ConfigManager:
         self._config_dir.mkdir(parents=True, exist_ok=True)
 
     def _load_config(self) -> None:
-        """Load configuration from file."""
+        """Load configuration from file.
+
+        Also migrates existing files that were created before the 0600
+        permission policy to restrict access to the owner only.
+        """
         if self._config_file.exists():
             try:
-                with open(self._config_file, 'r', encoding='utf-8') as f:
+                with open(self._config_file, encoding='utf-8') as f:
                     self._config = json.load(f)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 self._config = {}
+            # Tighten permissions on legacy world-readable config files
+            self._restrict_permissions(self._config_file)
 
         # Also load from .env file if exists
         self._load_env_file()
+        if self._env_file.exists():
+            self._restrict_permissions(self._env_file)
 
     def _load_env_file(self) -> None:
         """Load environment variables from .env file."""
         if self._env_file.exists():
             try:
-                with open(self._env_file, 'r', encoding='utf-8') as f:
+                with open(self._env_file, encoding='utf-8') as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith('#') and '=' in line:
@@ -73,17 +81,18 @@ class ConfigManager:
                                 self._config['token'] = value
                             elif key == self.ENV_DCE_PATH:
                                 self._config['dce_path'] = value
-            except IOError:
+            except OSError:
                 pass
 
     def _save_config(self) -> None:
-        """Save configuration to file."""
+        """Save configuration to file with owner-only permissions (0600)."""
         self._ensure_config_dir()
         with open(self._config_file, 'w', encoding='utf-8') as f:
             json.dump(self._config, f, indent=2)
+        self._restrict_permissions(self._config_file)
 
     def _save_env_file(self) -> None:
-        """Save configuration to .env file format."""
+        """Save configuration to .env file format with owner-only permissions (0600)."""
         self._ensure_config_dir()
         lines = []
 
@@ -94,6 +103,24 @@ class ConfigManager:
 
         with open(self._env_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines) + '\n')
+        self._restrict_permissions(self._env_file)
+
+    @staticmethod
+    def _restrict_permissions(path: Path) -> None:
+        """
+        Restrict file permissions to owner-only (0600).
+
+        No-op on Windows where POSIX permission bits don't apply; Windows
+        users should rely on filesystem ACLs on their user profile directory.
+        """
+        if os.name == 'nt':
+            return
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            # Best effort; don't crash config save if chmod fails
+            # (e.g., network filesystem, readonly mount)
+            pass
 
     def get_token(self) -> Optional[str]:
         """
@@ -221,7 +248,7 @@ class ConfigManager:
             return "****"
         return f"{token[:4]}...{token[-4:]}"
 
-    def get_gui_settings(self) -> Dict[str, Any]:
+    def get_gui_settings(self) -> dict[str, Any]:
         """
         Get GUI settings.
 
@@ -230,7 +257,7 @@ class ConfigManager:
         """
         return self._config.get('gui_settings', {})
 
-    def set_gui_settings(self, settings: Dict[str, Any]) -> None:
+    def set_gui_settings(self, settings: dict[str, Any]) -> None:
         """
         Save GUI settings.
 

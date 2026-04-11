@@ -5,42 +5,40 @@ Discord Exporter GUI - Tkinter-based graphical interface.
 A cross-platform GUI wrapper for DiscordChatExporter.Cli.
 """
 
+import os
+import queue
+import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
 from datetime import datetime
 from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 from typing import Optional
-import os
-import threading
-import queue
 
 from .config import ConfigManager
 from .exporter import (
-    Exporter,
-    ExportOptions,
-    ExportError,
     DCENotFoundError,
+    Exporter,
+    ExportError,
+    ExportOptions,
     TokenNotConfiguredError,
 )
 from .utils import (
     ExportFormat,
-    ParsedDiscordUrl,
-    ChannelInfo,
-    parse_discord_url,
-    parse_discord_url_extended,
-    parse_channel_list,
-    group_channels_by_type,
-    validate_channel_id,
-    parse_date,
-    validate_date_range,
-    validate_output_directory,
-    validate_dce_executable,
     LogEvent,
     LogLevel,
-    sanitize_error_message,
-    parse_dce_error,
-    get_error_solution,
+    ParsedDiscordUrl,
     cleanup_avatar_emoji_files,
+    get_error_solution,
+    group_channels_by_type,
+    parse_channel_list,
+    parse_date,
+    parse_dce_error,
+    parse_discord_url_extended,
+    sanitize_error_message,
+    validate_channel_id,
+    validate_date_range,
+    validate_dce_executable,
+    validate_output_directory,
 )
 
 
@@ -532,9 +530,9 @@ class DiscordExporterGUI:
             # Update export target display
             self._update_export_target()
 
-        except ValueError as e:
+        except ValueError:
             self.lbl_export_target.config(
-                text=f"URL 오류",
+                text="URL 오류",
                 foreground="red"
             )
 
@@ -712,8 +710,8 @@ class DiscordExporterGUI:
         Returns:
             True if accessible, False otherwise
         """
-        import subprocess
         import os
+        import subprocess
 
         try:
             dce_path = self.config.get_dce_path()
@@ -736,11 +734,17 @@ class DiscordExporterGUI:
                 cmd,
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 timeout=2  # Fast timeout
             )
 
-            # Check if forbidden or other permission error
-            output = (result.stdout + result.stderr).lower()
+            # Sanitize before any string handling — even though we only
+            # branch on keywords, future changes could log this output.
+            token = self.config.get_token()
+            safe_stdout = sanitize_error_message(result.stdout or "", token)
+            safe_stderr = sanitize_error_message(result.stderr or "", token)
+            output = (safe_stdout + safe_stderr).lower()
             if 'forbidden' in output or 'unauthorized' in output or 'missing access' in output:
                 return False
 
@@ -1790,8 +1794,8 @@ class DiscordExporterGUI:
 
         Handles Windows/macOS/Linux differences.
         """
-        from pathlib import Path
         import subprocess
+        from pathlib import Path
 
         folder = str(Path(file_path).parent)
 

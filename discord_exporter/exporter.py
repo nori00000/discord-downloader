@@ -5,25 +5,24 @@ Handles the actual invocation of DiscordChatExporter.Cli.
 """
 
 import subprocess
-import sys
 import threading
-from pathlib import Path
-from typing import Optional, List, Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
 
 from .config import ConfigManager
 from .utils import (
     ExportFormat,
-    generate_output_filename,
-    generate_guild_output_filename,
-    sanitize_error_message,
-    parse_dce_error,
-    get_error_solution,
-    convert_json_to_markdown,
+    LogCallback,
     LogEvent,
     LogLevel,
-    LogCallback,
+    convert_json_to_markdown,
     default_log_callback,
+    generate_guild_output_filename,
+    parse_dce_error,
+    sanitize_error_message,
+    validate_dce_executable,
+    validate_output_directory,
 )
 
 
@@ -98,6 +97,32 @@ class Exporter:
         self._cancelled = False
         self._current_process = None
 
+    @staticmethod
+    def _prepare_output_dir(path) -> Path:
+        """
+        Validate and create output directory, raising a friendly ExportError
+        if the path is invalid (missing parent, no write permission, etc.).
+
+        Args:
+            path: The desired output directory (str or Path).
+
+        Returns:
+            A ready-to-use Path object for the output directory.
+
+        Raises:
+            ExportError: If the path cannot be used (not a directory, no
+                         permission, or parent does not exist).
+        """
+        if path is None:
+            return Path.cwd()
+
+        path_str = str(path)
+        ok, error = validate_output_directory(path_str)
+        if not ok:
+            raise ExportError(error)
+
+        return Path(path_str).expanduser() if path_str else Path.cwd()
+
     def _get_token(self) -> str:
         """Get the Discord token, raising if not configured."""
         if self._token:
@@ -112,7 +137,12 @@ class Exporter:
         return token
 
     def _get_dce_path(self) -> str:
-        """Get the DCE executable path, raising if not found."""
+        """
+        Get the DCE executable path, raising if not found or not executable.
+
+        Validates both existence and execute permission (POSIX) so users see
+        a clear error at export-start rather than an opaque subprocess failure.
+        """
         if self._dce_path:
             return self._dce_path
 
@@ -122,6 +152,11 @@ class Exporter:
                 "DiscordChatExporter.Cli not found. "
                 "Please set DCE_PATH environment variable or configure via setup."
             )
+
+        ok, error = validate_dce_executable(dce_path)
+        if not ok:
+            raise DCENotFoundError(error)
+
         self._dce_path = dce_path
         return dce_path
 
@@ -129,7 +164,7 @@ class Exporter:
         self,
         subcommand: str,
         options: ExportOptions
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Build the DCE command with arguments.
 
@@ -181,7 +216,7 @@ class Exporter:
 
         return cmd
 
-    def _build_display_command(self, cmd: List[str]) -> str:
+    def _build_display_command(self, cmd: list[str]) -> str:
         """
         Build a display-safe command string with masked token.
 
@@ -208,7 +243,7 @@ class Exporter:
 
     def _run_command_streaming(
         self,
-        cmd: List[str],
+        cmd: list[str],
         log_callback: LogCallback
     ) -> int:
         """
@@ -242,14 +277,18 @@ class Exporter:
         ))
 
         try:
-            # Start process with pipes
+            # Start process with pipes.
+            # Force UTF-8 so Windows CP1252 doesn't corrupt Korean paths or
+            # non-ASCII channel names; errors='replace' prevents UnicodeDecodeError
+            # from killing the streaming reader on unexpected bytes.
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 bufsize=1,  # Line buffered
-                universal_newlines=True
             )
 
             # Store reference for cancellation
@@ -337,17 +376,17 @@ class Exporter:
 
             return process.returncode
 
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             raise DCENotFoundError(
                 f"DCE 실행 파일을 찾을 수 없습니다: {cmd[0]}\n"
                 "경로가 올바른지 확인하고, 실행 권한이 있는지 확인하세요."
-            )
+            ) from e
         except Exception as e:
             # Sanitize any exception message
             safe_msg = sanitize_error_message(str(e), token)
-            raise ExportError(f"실행 오류: {safe_msg}")
+            raise ExportError(f"실행 오류: {safe_msg}") from e
 
-    def _run_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
+    def _run_command(self, cmd: list[str]) -> subprocess.CompletedProcess:
         """
         Run a DCE command and handle the result.
 
@@ -369,7 +408,7 @@ class Exporter:
         # Create a display command with masked token
         display_cmd = []
         skip_next = False
-        for i, arg in enumerate(cmd):
+        for arg in cmd:
             if skip_next:
                 display_cmd.append('<TOKEN>')
                 skip_next = False
@@ -386,6 +425,8 @@ class Exporter:
                 cmd,
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 timeout=3600  # 1 hour timeout for large exports
             )
 
@@ -400,16 +441,16 @@ class Exporter:
 
             return result
 
-        except subprocess.TimeoutExpired:
-            raise ExportError("Export timed out after 1 hour")
-        except FileNotFoundError:
+        except subprocess.TimeoutExpired as e:
+            raise ExportError("Export timed out after 1 hour") from e
+        except FileNotFoundError as e:
             raise DCENotFoundError(
                 f"Could not execute DCE at: {cmd[0]}\n"
                 "Please verify the path is correct and the file is executable."
-            )
+            ) from e
         except Exception as e:
             sanitized_msg = sanitize_error_message(str(e), token)
-            raise ExportError(f"Export failed: {sanitized_msg}")
+            raise ExportError(f"Export failed: {sanitized_msg}") from e
 
     def export_channel(
         self,
@@ -443,9 +484,7 @@ class Exporter:
         # Use DCE's naming pattern for readable filenames
         # %C = channel name, which includes thread/forum post titles
         if not options.output_path:
-            output_dir = options.output_dir or Path.cwd()
-            output_dir = Path(output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
+            output_dir = self._prepare_output_dir(options.output_dir)
 
             if is_markdown:
                 # For Markdown: DCE exports JSON, then we convert
@@ -546,11 +585,16 @@ class Exporter:
         # Use default callback if none provided
         callback = log_callback or default_log_callback
 
+        # Validate the parent output_dir BEFORE generate_guild_output_filename
+        # (which creates a subdirectory under it). This surfaces permission
+        # or missing-parent errors as a friendly ExportError.
+        parent_dir = self._prepare_output_dir(options.output_dir)
+
         # Generate output directory if not specified
         output_dir = generate_guild_output_filename(
             options.guild_id,
             options.export_format,
-            options.output_dir
+            parent_dir,
         )
 
         # For guild export, -o is a directory pattern
@@ -600,42 +644,73 @@ class Exporter:
 
         return output_dir
 
-    def export_dm(self, options: ExportOptions) -> Path:
+    def export_dm(
+        self,
+        options: ExportOptions,
+        log_callback: Optional[LogCallback] = None,
+    ) -> Path:
         """
         Export all DM channels.
 
         Args:
             options: Export options.
+            log_callback: Optional callback for streaming logs. If None,
+                          uses default print-based callback (blocking mode).
 
         Returns:
             Path to the output directory.
 
         Raises:
-            ExportError: If export fails.
+            ExportError: If export fails or output_dir is not usable.
         """
         from datetime import datetime
 
-        # Generate output directory
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        if options.output_dir:
-            output_dir = Path(options.output_dir) / f"dm-export-{timestamp}"
-        else:
-            output_dir = Path.cwd() / f"dm-export-{timestamp}"
+        callback = log_callback or default_log_callback
 
+        # Validate the parent output directory (friendly error if missing /
+        # not writable) before creating the timestamped subdirectory.
+        parent_dir = self._prepare_output_dir(options.output_dir)
+
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        output_dir = parent_dir / f"dm-export-{timestamp}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # For DM export, -o is a directory pattern
         options.output_path = output_dir / f"%G - %C{options.export_format.get_extension()}"
 
+        callback(LogEvent(
+            level=LogLevel.INFO,
+            message="DM 내보내기 시작"
+        ))
+
         cmd = self._build_command('exportdm', options)
-        result = self._run_command(cmd)
 
-        # Print output (sanitized)
-        token = self._get_token()
-        if result.stdout:
-            print(sanitize_error_message(result.stdout, token))
+        # Use streaming if callback provided, otherwise blocking for
+        # backward compatibility with existing CLI callers.
+        if log_callback:
+            return_code = self._run_command_streaming(cmd, callback)
 
-        print(f"\nExported DMs to directory: {output_dir}")
+            if self._cancelled:
+                callback(LogEvent(
+                    level=LogLevel.WARNING,
+                    message="내보내기가 중지되었습니다."
+                ))
+                return output_dir
+
+            if return_code != 0:
+                raise ExportError(
+                    f"내보내기 실패 (종료 코드: {return_code})"
+                )
+        else:
+            result = self._run_command(cmd)
+            token = self._get_token()
+            if result.stdout:
+                print(sanitize_error_message(result.stdout, token))
+
+        callback(LogEvent(
+            level=LogLevel.SUCCESS,
+            message=f"완료: {output_dir}"
+        ))
         return output_dir
 
     def list_guilds(self) -> str:
