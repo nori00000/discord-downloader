@@ -396,28 +396,28 @@ def parse_common_export_options(args: argparse.Namespace) -> ExportOptions:
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
-        prog='discord-exporter',
+        prog='discord-downloader',
         description='Discord 채팅 로그를 쉽게 내보내기 위한 CLI 도구',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 예시:
   # 초기 설정
-  discord-exporter setup
+  discord-downloader setup
 
   # 채널 URL로 내보내기
-  discord-exporter export --url "https://discord.com/channels/123/456" --format html
+  discord-downloader export --url "https://discord.com/channels/123/456" --format html
 
   # 채널 ID로 내보내기
-  discord-exporter export --channel-id 1234567890123456789 --format txt
+  discord-downloader export --channel-id 1234567890123456789 --format txt
 
   # 날짜 범위 지정
-  discord-exporter export --channel-id 123 --after "2024-01-01" --before "2024-12-31"
+  discord-downloader export --channel-id 123 --after "2024-01-01" --before "2024-12-31"
 
   # 서버 전체 내보내기
-  discord-exporter exportguild --guild-id 1234567890123456789
+  discord-downloader exportguild --guild-id 1234567890123456789
 
   # DM 전체 내보내기
-  discord-exporter exportdm --format json
+  discord-downloader exportdm --format json
         """
     )
 

@@ -25,8 +25,8 @@ def test_save_token_sets_mode_0600(isolated_home):
     cm = ConfigManager()
     cm.set_token("Njk4OTIyMDU1MzQ5MDQzMzEx.fake.token_value_for_test_only")
 
-    cfg_path = isolated_home / ".discord-exporter" / "config.json"
-    env_path = isolated_home / ".discord-exporter" / ".env"
+    cfg_path = isolated_home / ".discord-downloader" / "config.json"
+    env_path = isolated_home / ".discord-downloader" / ".env"
 
     for path in (cfg_path, env_path):
         assert path.exists(), f"{path} not created"
@@ -38,7 +38,7 @@ def test_save_token_sets_mode_0600(isolated_home):
 def test_load_migrates_legacy_0644_config(isolated_home):
     """Legacy config files written with world-readable perms must be
     re-chmod'd to 0600 at load time so users don't stay exposed."""
-    cfg_dir = isolated_home / ".discord-exporter"
+    cfg_dir = isolated_home / ".discord-downloader"
     cfg_dir.mkdir()
     cfg_path = cfg_dir / "config.json"
     cfg_path.write_text(json.dumps({"token": "fake_legacy_token"}))
@@ -49,6 +49,19 @@ def test_load_migrates_legacy_0644_config(isolated_home):
 
     mode = stat.S_IMODE(cfg_path.stat().st_mode)
     assert mode == 0o600, f"legacy config still {oct(mode)}"
+
+
+def test_load_migrates_legacy_directory(isolated_home):
+    legacy_dir = isolated_home / ".discord-exporter"
+    legacy_dir.mkdir()
+    (legacy_dir / "config.json").write_text(json.dumps({"token": "from_legacy"}))
+    (legacy_dir / ".env").write_text('DCE_PATH="/tmp/dce"\n')
+
+    cm = ConfigManager()
+
+    assert cm.get_config_path() == isolated_home / ".discord-downloader"
+    assert (isolated_home / ".discord-downloader" / "config.json").exists()
+    assert cm.get_token() == "from_legacy"
 
 
 # ---------------------------------------------------------------------------

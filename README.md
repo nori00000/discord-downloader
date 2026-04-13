@@ -1,8 +1,10 @@
-# Discord Exporter
+# Discord Downloader
 
-![CI](https://github.com/nori00000/discord-exporter/actions/workflows/test.yml/badge.svg)
+![CI](https://github.com/nori00000/discord-downloader/actions/workflows/test.yml/badge.svg)
 
 [DiscordChatExporter.Cli](https://github.com/Tyrrrz/DiscordChatExporter)를 쉽게 사용하기 위한 크로스 플랫폼 CLI/GUI 래퍼 도구입니다.
+
+이제 기본 명령어는 `discord-downloader`이며, 기존 `discord-exporter` 명령도 하위 호환용으로 계속 동작합니다.
 
 ## 주요 기능
 
@@ -34,7 +36,7 @@
 
 ```bash
 # 1. 저장소 클론 또는 소스 다운로드
-cd ~/Documents/dev/discord-exporter
+cd ~/Documents/dev/discord-downloader
 
 # 2. 패키지 설치 (editable 모드)
 pip3 install -e .
@@ -50,7 +52,7 @@ chmod +x ~/Downloads/DiscordChatExporter.Cli.osx-arm64/DiscordChatExporter.Cli
 
 ```powershell
 # 1. 저장소 클론 또는 소스 다운로드
-cd C:\Users\YourName\Documents\discord-exporter
+cd C:\Users\YourName\Documents\discord-downloader
 
 # 2. 패키지 설치
 pip install -e .
@@ -74,17 +76,17 @@ pip install .
 처음 사용 시 Discord 토큰과 DCE 경로를 설정해야 합니다.
 
 ```bash
-discord-exporter setup
+discord-downloader setup
 ```
 
 또는 명령줄로 직접 설정:
 
 ```bash
 # macOS
-discord-exporter setup --dce-path ~/Downloads/DiscordChatExporter.Cli.osx-arm64/DiscordChatExporter.Cli
+discord-downloader setup --dce-path ~/Downloads/DiscordChatExporter.Cli.osx-arm64/DiscordChatExporter.Cli
 
 # Windows
-discord-exporter setup --dce-path "C:\Tools\DiscordChatExporter\DiscordChatExporter.Cli.exe"
+discord-downloader setup --dce-path "C:\Tools\DiscordChatExporter\DiscordChatExporter.Cli.exe"
 ```
 
 ### 환경 변수로 설정 (선택사항)
@@ -120,7 +122,7 @@ GUI를 사용하면 명령어 없이 시각적으로 Discord 채팅을 내보낼
 python -m discord_exporter.gui
 
 # 방법 2: 엔트리포인트로 실행 (pip install 후)
-discord-exporter-gui
+discord-downloader-gui
 ```
 
 ### GUI 사용 절차
@@ -166,48 +168,48 @@ URL 형식: `https://discord.com/channels/서버ID/채널ID`
 
 ```bash
 # URL로 내보내기
-discord-exporter export --url "https://discord.com/channels/123456789/987654321" --format html
+discord-downloader export --url "https://discord.com/channels/123456789/987654321" --format html
 
 # 채널 ID로 내보내기
-discord-exporter export --channel-id 987654321 --format txt
+discord-downloader export --channel-id 987654321 --format txt
 
 # 출력 디렉터리 지정
-discord-exporter export --channel-id 987654321 --format html --output-dir ./exports
+discord-downloader export --channel-id 987654321 --format html --output-dir ./exports
 
 # 날짜 범위 지정
-discord-exporter export --channel-id 987654321 --after "2024-01-01" --before "2024-12-31"
+discord-downloader export --channel-id 987654321 --after "2024-01-01" --before "2024-12-31"
 
 # 미디어(이미지, 첨부파일) 포함
-discord-exporter export --channel-id 987654321 --format html --media
+discord-downloader export --channel-id 987654321 --format html --media
 ```
 
 ### 서버 전체 내보내기
 
 ```bash
 # 서버 ID로 내보내기
-discord-exporter exportguild --guild-id 123456789 --format html
+discord-downloader exportguild --guild-id 123456789 --format html
 
 # URL로 내보내기 (아무 채널 URL)
-discord-exporter exportguild --url "https://discord.com/channels/123456789/987654321"
+discord-downloader exportguild --url "https://discord.com/channels/123456789/987654321"
 ```
 
 ### DM 전체 내보내기
 
 ```bash
-discord-exporter exportdm --format json
+discord-downloader exportdm --format json
 ```
 
 ### 목록 조회
 
 ```bash
 # 접근 가능한 서버 목록
-discord-exporter list-guilds
+discord-downloader list-guilds
 
 # 서버의 채널 목록
-discord-exporter list-channels --guild-id 123456789
+discord-downloader list-channels --guild-id 123456789
 
 # DM 채널 목록
-discord-exporter list-dm
+discord-downloader list-dm
 ```
 
 ## 출력 형식
@@ -258,8 +260,8 @@ Markdown 내보내기는 내부적으로 DCE의 JSON 익스포트를 돌린 뒤 
 
 ## 설정 파일 위치
 
-- **macOS/Linux**: `~/.discord-exporter/`
-- **Windows**: `C:\Users\YourName\.discord-exporter\`
+- **macOS/Linux**: `~/.discord-downloader/`
+- **Windows**: `C:\Users\YourName\.discord-downloader\`
 
 설정 파일:
 - `config.json` - JSON 형식 설정
@@ -284,13 +286,13 @@ xattr -d com.apple.quarantine DiscordChatExporter.Cli
 
 ```bash
 # DCE 경로 재설정
-discord-exporter setup --dce-path /path/to/DiscordChatExporter.Cli
+discord-downloader setup --dce-path /path/to/DiscordChatExporter.Cli
 ```
 
 ### 토큰 재설정
 
 ```bash
-discord-exporter setup
+discord-downloader setup
 # "토큰을 변경하시겠습니까?" 에서 y 입력
 ```
 
@@ -298,7 +300,7 @@ discord-exporter setup
 
 토큰 처리는 가능한 한 보수적으로 설계되어 있습니다:
 
-- **로컬 저장 전용.** 토큰은 `~/.discord-exporter/{config.json, .env}`에만
+- **로컬 저장 전용.** 토큰은 `~/.discord-downloader/{config.json, .env}`에만
   기록되며, 외부 서비스로 전송되는 일은 없습니다. 네트워크 호출은 전부 DCE
   서브프로세스를 통해서만 발생합니다.
 - **`chmod 0600` 자동 적용.** 설정 파일은 저장 즉시 소유자만 읽고 쓸 수 있게
@@ -312,7 +314,7 @@ discord-exporter setup
   적용한 `xxxx...xxxx` 형식만 노출됩니다.
 
 의심스러운 노출이 있었다면 Discord 비밀번호를 변경해 기존 토큰을 무효화한 뒤
-`discord-exporter setup`으로 새 토큰을 등록하는 것을 권장합니다.
+`discord-downloader setup`으로 새 토큰을 등록하는 것을 권장합니다.
 
 ## 개발 / 테스트
 
