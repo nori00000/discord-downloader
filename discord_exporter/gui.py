@@ -7,6 +7,7 @@ A cross-platform GUI wrapper for DiscordChatExporter.Cli.
 
 import os
 import queue
+import random
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -87,6 +88,12 @@ class DiscordExporterGUI:
         self.exclude_emojis = tk.BooleanVar(value=True)  # Default: exclude emojis
         self.include_threads = tk.StringVar(value="all")  # "none", "active", "all"
         self.safe_mode = tk.BooleanVar(value=True)  # Default: safe mode ON
+        # Delay between exports. Users set a min/max window and press the
+        # "랜덤" button to pick a value in [min, max]; the picked value is
+        # applied before each DCE invocation.
+        self.delay_min = tk.StringVar(value="0")
+        self.delay_max = tk.StringVar(value="0")
+        self.current_delay = tk.StringVar(value="0.0")
         self.is_running = False
 
         # Parsed URL state
@@ -486,6 +493,69 @@ class DiscordExporterGUI:
             foreground="gray",
             font=("TkDefaultFont", 9)
         ).pack(anchor=tk.W)
+
+        # Delay configuration: min/max window + random picker
+        delay_frame = ttk.Frame(frame)
+        delay_frame.pack(fill=tk.X, pady=(5, 0))
+
+        ttk.Label(delay_frame, text="지연 (초):").pack(side=tk.LEFT)
+        ttk.Label(delay_frame, text="최소").pack(side=tk.LEFT, padx=(8, 2))
+        self.ent_delay_min = ttk.Entry(
+            delay_frame, textvariable=self.delay_min, width=6
+        )
+        self.ent_delay_min.pack(side=tk.LEFT)
+        ttk.Label(delay_frame, text="최대").pack(side=tk.LEFT, padx=(8, 2))
+        self.ent_delay_max = ttk.Entry(
+            delay_frame, textvariable=self.delay_max, width=6
+        )
+        self.ent_delay_max.pack(side=tk.LEFT)
+        ttk.Button(
+            delay_frame,
+            text="랜덤",
+            command=self._on_randomize_delay,
+            width=6,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(delay_frame, text="현재:").pack(side=tk.LEFT, padx=(12, 2))
+        ttk.Label(
+            delay_frame,
+            textvariable=self.current_delay,
+            foreground="blue",
+        ).pack(side=tk.LEFT)
+        ttk.Label(delay_frame, text="초", foreground="gray").pack(side=tk.LEFT)
+
+    def _parse_delay_bounds(self) -> tuple[float, float]:
+        """Parse min/max delay fields. Invalid values collapse to 0.
+
+        Returns ``(lo, hi)`` with ``lo <= hi`` and both >= 0. Non-numeric
+        input or negatives are silently treated as 0 so the UI never
+        raises — the worst case is that no delay is applied.
+        """
+        def _clean(raw: str) -> float:
+            try:
+                value = float(raw.strip())
+            except (ValueError, AttributeError):
+                return 0.0
+            return max(0.0, value)
+
+        lo = _clean(self.delay_min.get())
+        hi = _clean(self.delay_max.get())
+        if hi < lo:
+            lo, hi = hi, lo
+        return lo, hi
+
+    def _on_randomize_delay(self):
+        """Pick a random delay in [min, max] and update the display."""
+        lo, hi = self._parse_delay_bounds()
+        picked = random.uniform(lo, hi) if hi > 0 else 0.0
+        self.current_delay.set(f"{picked:.2f}")
+        self._log(f"랜덤 지연 적용: {picked:.2f}초 (범위 {lo:.2f}~{hi:.2f})")
+
+    def _get_current_delay(self) -> float:
+        """Return the currently-applied delay in seconds (0 if unset)."""
+        try:
+            return max(0.0, float(self.current_delay.get()))
+        except (ValueError, AttributeError):
+            return 0.0
 
     def _on_media_toggle(self):
         """Enable/disable exclude options based on media checkbox."""
@@ -1500,6 +1570,7 @@ class DiscordExporterGUI:
             media=self.media_enabled.get(),
             include_threads=None,
             safe_mode=self.safe_mode.get(),
+            delay_seconds=self._get_current_delay(),
         )
 
     def _run_export(self, options: ExportOptions):
@@ -1989,6 +2060,7 @@ class DiscordExporterGUI:
             media=self.media_enabled.get(),
             include_threads=include_threads,
             safe_mode=self.safe_mode.get(),
+            delay_seconds=self._get_current_delay(),
         )
 
     # =========================================================================
@@ -2028,6 +2100,12 @@ class DiscordExporterGUI:
         if 'safe_mode' in settings:
             self.safe_mode.set(settings['safe_mode'])
 
+        # Delay bounds
+        if 'delay_min' in settings:
+            self.delay_min.set(str(settings['delay_min']))
+        if 'delay_max' in settings:
+            self.delay_max.set(str(settings['delay_max']))
+
         # Filter text channels only
         if 'filter_text_only' in settings:
             self.filter_text_only.set(settings['filter_text_only'])
@@ -2049,6 +2127,8 @@ class DiscordExporterGUI:
             'exclude_emojis': self.exclude_emojis.get(),
             'include_threads': self.include_threads.get(),
             'safe_mode': self.safe_mode.get(),
+            'delay_min': self.delay_min.get(),
+            'delay_max': self.delay_max.get(),
             'filter_text_only': self.filter_text_only.get(),
             'filter_accessible': self.filter_accessible.get(),
         }
