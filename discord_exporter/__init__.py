@@ -1,11 +1,13 @@
 """
-Discord Exporter — a cross-platform CLI/GUI wrapper around
+Discord Downloader — a cross-platform CLI/GUI wrapper around
 Tyrrrz's DiscordChatExporter.Cli.
 
-This package exposes two entry points (configured in ``pyproject.toml``):
+This package exposes four entry points (configured in ``pyproject.toml``):
 
-- ``discord-exporter`` — argparse-based CLI (``discord_exporter.cli:main``)
-- ``discord-exporter-gui`` — tkinter GUI (``discord_exporter.gui:main``)
+- ``discord-downloader`` — primary argparse-based CLI
+- ``discord-downloader-gui`` — primary tkinter GUI
+- ``discord-exporter`` — backward-compatible CLI alias
+- ``discord-exporter-gui`` — backward-compatible GUI alias
 
 The core reusable surface lives in ``discord_exporter.exporter.Exporter``
 and ``discord_exporter.config.ConfigManager``; ``discord_exporter.utils``
@@ -18,6 +20,6 @@ as an argument to the DCE subprocess. All subprocess output flows through
 """
 
 __version__ = "1.1.0"
-__author__ = "Discord Exporter"
+__author__ = "Discord Downloader"
 
 __all__ = ["__version__", "__author__"]

@@ -31,7 +31,7 @@ from .utils import (
 
 def print_error(message: str) -> None:
     """Print an error message to stderr."""
-    print(f"Error: {message}", file=sys.stderr)
+    print(f"문제: {message}", file=sys.stderr)
 
 
 def print_success(message: str) -> None:
@@ -41,12 +41,12 @@ def print_success(message: str) -> None:
 
 def prompt_for_token() -> str:
     """Prompt user for Discord token securely."""
-    print("\n디스코드 토큰이 설정되어 있지 않습니다.")
-    print("토큰을 입력해 주세요 (입력 내용은 표시되지 않습니다):")
+    print("\n디스코드 토큰이 아직 없어요.")
+    print("토큰을 넣어주세요. 입력한 글자는 화면에 보이지 않아요:")
     print()
 
     try:
-        token = getpass.getpass("Discord Token: ")
+        token = getpass.getpass("토큰: ")
         if not token.strip():
             print_error("토큰이 입력되지 않았습니다.")
             sys.exit(1)
@@ -58,8 +58,8 @@ def prompt_for_token() -> str:
 
 def prompt_for_dce_path() -> str:
     """Prompt user for DCE path."""
-    print("\nDiscordChatExporter.Cli 경로가 설정되어 있지 않습니다.")
-    print("실행 파일의 전체 경로를 입력해 주세요:")
+    print("\nDiscordChatExporter.Cli 위치가 아직 없어요.")
+    print("실행 파일이 있는 곳을 입력해 주세요:")
     print()
     print("예시:")
     print("  macOS: ~/Downloads/DiscordChatExporter.Cli.osx-arm64/DiscordChatExporter.Cli")
@@ -67,7 +67,7 @@ def prompt_for_dce_path() -> str:
     print()
 
     try:
-        path = input("DCE Path: ").strip()
+        path = input("DCE 위치: ").strip()
         if not path:
             print_error("경로가 입력되지 않았습니다.")
             sys.exit(1)
@@ -103,7 +103,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     """Handle setup command."""
     config = ConfigManager()
 
-    print("Discord Exporter 설정")
+    print("디스코드 다운로더 설정")
     print("=" * 40)
 
     # Token setup
@@ -114,8 +114,8 @@ def cmd_setup(args: argparse.Namespace) -> int:
         current_token = config.get_token()
         if current_token:
             masked = config.mask_token(current_token)
-            print(f"현재 토큰: {masked}")
-            change = input("토큰을 변경하시겠습니까? (y/N): ").strip().lower()
+            print(f"지금 토큰: {masked}")
+            change = input("토큰을 바꿀까요? (y/N): ").strip().lower()
             if change == 'y':
                 token = prompt_for_token()
                 config.set_token(token)
@@ -136,8 +136,8 @@ def cmd_setup(args: argparse.Namespace) -> int:
     else:
         current_path = config.get_dce_path()
         if current_path:
-            print(f"현재 DCE 경로: {current_path}")
-            change = input("경로를 변경하시겠습니까? (y/N): ").strip().lower()
+            print(f"지금 DCE 위치: {current_path}")
+            change = input("위치를 바꿀까요? (y/N): ").strip().lower()
             if change == 'y':
                 dce_path = prompt_for_dce_path()
                 config.set_dce_path(dce_path)
@@ -396,28 +396,28 @@ def parse_common_export_options(args: argparse.Namespace) -> ExportOptions:
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
-        prog='discord-exporter',
+        prog='discord-downloader',
         description='Discord 채팅 로그를 쉽게 내보내기 위한 CLI 도구',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 예시:
   # 초기 설정
-  discord-exporter setup
+  discord-downloader setup
 
   # 채널 URL로 내보내기
-  discord-exporter export --url "https://discord.com/channels/123/456" --format html
+  discord-downloader export --url "https://discord.com/channels/123/456" --format html
 
   # 채널 ID로 내보내기
-  discord-exporter export --channel-id 1234567890123456789 --format txt
+  discord-downloader export --channel-id 1234567890123456789 --format txt
 
   # 날짜 범위 지정
-  discord-exporter export --channel-id 123 --after "2024-01-01" --before "2024-12-31"
+  discord-downloader export --channel-id 123 --after "2024-01-01" --before "2024-12-31"
 
   # 서버 전체 내보내기
-  discord-exporter exportguild --guild-id 1234567890123456789
+  discord-downloader exportguild --guild-id 1234567890123456789
 
   # DM 전체 내보내기
-  discord-exporter exportdm --format json
+  discord-downloader exportdm --format json
         """
     )
 

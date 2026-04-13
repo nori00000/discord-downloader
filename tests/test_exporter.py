@@ -90,6 +90,51 @@ class TestBuildCommand:
         assert cmd[idx + 1] == "1"
 
 
+class TestDelaySleep:
+    def test_sleep_with_cancel_skips_nonpositive(self, fake_dce):
+        ex = _make_exporter(fake_dce)
+        # Must return immediately regardless of cancel state
+        ex._sleep_with_cancel(0)
+        ex._sleep_with_cancel(-1.5)
+
+    def test_sleep_with_cancel_sleeps_positive(self, fake_dce, monkeypatch):
+        ex = _make_exporter(fake_dce)
+        slept = []
+
+        # Have sleep push the fake clock past the deadline so the loop
+        # terminates after exactly one iteration regardless of timing.
+        clock = {"t": 100.0}
+        monkeypatch.setattr(
+            "discord_exporter.exporter.time.monotonic",
+            lambda: clock["t"],
+        )
+
+        def fake_sleep(seconds):
+            slept.append(seconds)
+            clock["t"] += 10.0  # jump well past any deadline
+        monkeypatch.setattr(
+            "discord_exporter.exporter.time.sleep",
+            fake_sleep,
+        )
+
+        ex._sleep_with_cancel(0.5)
+        assert slept, "Expected time.sleep to be called for positive delay"
+
+    def test_sleep_with_cancel_exits_on_cancel(self, fake_dce, monkeypatch):
+        ex = _make_exporter(fake_dce)
+        ex._cancelled = True
+        monkeypatch.setattr(
+            "discord_exporter.exporter.time.sleep",
+            lambda s: (_ for _ in ()).throw(AssertionError("should not sleep")),
+        )
+        # Must return immediately when already cancelled
+        ex._sleep_with_cancel(5.0)
+
+    def test_export_options_delay_default_zero(self):
+        opts = ExportOptions(channel_id="100")
+        assert opts.delay_seconds == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Token masking in display command
 # ---------------------------------------------------------------------------

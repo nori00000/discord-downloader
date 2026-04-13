@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for discord-exporter tests."""
+"""Shared pytest fixtures for discord-downloader tests."""
 
 import os
 import sys
@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 def isolated_home(tmp_path, monkeypatch):
     """
     Redirect Path.home() to a tmp directory so ConfigManager writes into
-    an isolated location instead of the user's real ~/.discord-exporter.
+    an isolated location instead of the user's real ~/.discord-downloader.
 
     Also clears DISCORD_TOKEN / DCE_PATH env vars so tests see a clean slate.
     """

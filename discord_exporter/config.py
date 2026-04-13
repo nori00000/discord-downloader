@@ -7,6 +7,7 @@ Tokens are stored locally and never transmitted externally.
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -15,7 +16,8 @@ class ConfigManager:
     """Manages configuration including Discord token and DCE path."""
 
     # Configuration file locations
-    CONFIG_DIR_NAME = ".discord-exporter"
+    CONFIG_DIR_NAME = ".discord-downloader"
+    LEGACY_CONFIG_DIR_NAMES = (".discord-exporter",)
     CONFIG_FILE_NAME = "config.json"
     ENV_FILE_NAME = ".env"
 
@@ -24,18 +26,39 @@ class ConfigManager:
     ENV_DCE_PATH = "DCE_PATH"
 
     def __init__(self):
-        self._config_dir = self._get_config_dir()
+        self._config_dir = self._resolve_config_dir()
         self._config_file = self._config_dir / self.CONFIG_FILE_NAME
         self._env_file = self._config_dir / self.ENV_FILE_NAME
         self._config: dict[str, Any] = {}
         self._load_config()
 
-    def _get_config_dir(self) -> Path:
-        """Get the configuration directory path."""
-        # Use user's home directory
+    def _resolve_config_dir(self) -> Path:
+        """Prefer the new config directory and migrate legacy data when present."""
         home = Path.home()
-        config_dir = home / self.CONFIG_DIR_NAME
-        return config_dir
+        new_dir = home / self.CONFIG_DIR_NAME
+        if new_dir.exists():
+            return new_dir
+
+        for legacy_name in self.LEGACY_CONFIG_DIR_NAMES:
+            legacy_dir = home / legacy_name
+            if legacy_dir.exists():
+                return self._migrate_legacy_config_dir(legacy_dir, new_dir)
+
+        return new_dir
+
+    def _migrate_legacy_config_dir(self, legacy_dir: Path, new_dir: Path) -> Path:
+        """Copy existing config into the new product-name directory on first run."""
+        try:
+            new_dir.mkdir(parents=True, exist_ok=True)
+            for file_name in (self.CONFIG_FILE_NAME, self.ENV_FILE_NAME):
+                legacy_file = legacy_dir / file_name
+                new_file = new_dir / file_name
+                if legacy_file.exists() and not new_file.exists():
+                    shutil.copy2(legacy_file, new_file)
+                    self._restrict_permissions(new_file)
+            return new_dir
+        except OSError:
+            return legacy_dir
 
     def _ensure_config_dir(self) -> None:
         """Ensure the configuration directory exists."""

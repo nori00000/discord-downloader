@@ -7,6 +7,7 @@ A cross-platform GUI wrapper for DiscordChatExporter.Cli.
 
 import os
 import queue
+import random
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -43,32 +44,32 @@ from .utils import (
 
 
 class DiscordExporterGUI:
-    """Main GUI application for Discord Exporter."""
+    """Main GUI application for Discord Downloader."""
 
     # Application constants
-    TITLE = "Discord Exporter"
+    TITLE = "디스코드 다운로더"
     MIN_WIDTH = 700
     MIN_HEIGHT = 750
     QUEUE_POLL_MS = 100  # Poll queue every 100ms
 
     # Format options for dropdown
     FORMAT_OPTIONS = [
-        ("HTML (Dark)", ExportFormat.HTML_DARK),
-        ("HTML (Light)", ExportFormat.HTML_LIGHT),
-        ("Markdown (Obsidian)", ExportFormat.MARKDOWN),
-        ("Plain Text", ExportFormat.PLAIN_TEXT),
-        ("JSON", ExportFormat.JSON),
+        ("웹페이지 (어두운 화면)", ExportFormat.HTML_DARK),
+        ("웹페이지 (밝은 화면)", ExportFormat.HTML_LIGHT),
+        ("메모용 글 (옵시디언)", ExportFormat.MARKDOWN),
+        ("글자만", ExportFormat.PLAIN_TEXT),
+        ("JSON 파일", ExportFormat.JSON),
         ("CSV", ExportFormat.CSV),
     ]
 
     # Error solutions for user guidance
     ERROR_SOLUTIONS = {
-        "token": "상태바의 '토큰 설정' 버튼을 클릭하여 Discord 토큰을 입력하세요.",
-        "dce_path": "상태바의 '찾아보기' 버튼을 클릭하여 DCE 실행 파일을 선택하세요.",
-        "dce_not_found": "DCE 파일이 삭제되었거나 이동되었습니다. 경로를 다시 설정하세요.",
-        "channel": "올바른 Discord 채널 URL 또는 채널 ID를 입력하세요.",
-        "permission": "출력 폴더에 쓰기 권한이 있는지 확인하거나, 다른 폴더를 선택하세요.",
-        "network": "인터넷 연결을 확인하고, Discord 토큰이 유효한지 확인하세요.",
+        "token": "위쪽의 '토큰 넣기' 버튼을 눌러 토큰을 넣어주세요.",
+        "dce_path": "위쪽의 '찾아보기' 버튼을 눌러 DCE 실행 파일을 골라주세요.",
+        "dce_not_found": "DCE 파일이 없어졌거나 자리가 바뀌었어요. 다시 골라주세요.",
+        "channel": "디스코드 링크나 채널 번호를 다시 확인해 주세요.",
+        "permission": "저장 폴더에 쓸 수 있는지 확인하거나 다른 폴더를 골라주세요.",
+        "network": "인터넷 연결과 디스코드 토큰이 제대로 맞는지 확인해 주세요.",
     }
 
     def __init__(self):
@@ -81,12 +82,18 @@ class DiscordExporterGUI:
         self.config = ConfigManager()
 
         # State variables
-        self.selected_format = tk.StringVar(value="HTML (Dark)")
+        self.selected_format = tk.StringVar(value="웹페이지 (어두운 화면)")
         self.media_enabled = tk.BooleanVar(value=False)
         self.exclude_avatars = tk.BooleanVar(value=True)  # Default: exclude avatars
         self.exclude_emojis = tk.BooleanVar(value=True)  # Default: exclude emojis
         self.include_threads = tk.StringVar(value="all")  # "none", "active", "all"
         self.safe_mode = tk.BooleanVar(value=True)  # Default: safe mode ON
+        # Delay between exports. Users set a min/max window and press the
+        # "랜덤" button to pick a value in [min, max]; the picked value is
+        # applied before each DCE invocation.
+        self.delay_min = tk.StringVar(value="0")
+        self.delay_max = tk.StringVar(value="0")
+        self.current_delay = tk.StringVar(value="0.0")
         self.is_running = False
 
         # Parsed URL state
@@ -141,7 +148,7 @@ class DiscordExporterGUI:
 
         ttk.Button(
             token_frame,
-            text="토큰 설정",
+            text="토큰 넣기",
             command=self._on_set_token,
             width=12
         ).pack(side=tk.LEFT)
@@ -150,7 +157,7 @@ class DiscordExporterGUI:
         dce_frame = ttk.Frame(frame)
         dce_frame.pack(fill=tk.X, pady=2)
 
-        ttk.Label(dce_frame, text="DCE:").pack(side=tk.LEFT)
+        ttk.Label(dce_frame, text="DCE 파일:").pack(side=tk.LEFT)
         self.lbl_dce_status = ttk.Label(dce_frame, text="확인 중...")
         self.lbl_dce_status.pack(side=tk.LEFT, padx=(5, 20))
 
@@ -210,7 +217,7 @@ class DiscordExporterGUI:
         url_frame = ttk.Frame(frame)
         url_frame.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(url_frame, text="Discord URL:", width=12).pack(side=tk.LEFT)
+        ttk.Label(url_frame, text="디스코드 링크:", width=12).pack(side=tk.LEFT)
 
         self.ent_url = ttk.Entry(url_frame)
         self.ent_url.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
@@ -219,19 +226,19 @@ class DiscordExporterGUI:
         # Placeholder and auto-parse on paste
         self._set_placeholder(
             self.ent_url,
-            "https://discord.com/channels/서버/채널 또는 스레드 URL"
+            "https://discord.com/channels/서버/채널 또는 스레드 링크"
         )
         self.ent_url.bind("<KeyRelease>", self._on_url_change)
 
         ttk.Button(
             url_frame,
-            text="분석",
+            text="불러오기",
             command=self._on_parse_url,
             width=8
         ).pack(side=tk.LEFT)
 
         # ID fields frame (3 fields in a row)
-        id_frame = ttk.LabelFrame(frame, text="ID (자동 입력 또는 직접 수정)", padding="5")
+        id_frame = ttk.LabelFrame(frame, text="번호 입력 (자동으로 채워지며, 직접 바꿀 수도 있어요)", padding="5")
         id_frame.pack(fill=tk.X, pady=(0, 10))
 
         id_inner = ttk.Frame(id_frame)
@@ -282,12 +289,12 @@ class DiscordExporterGUI:
         self.filter_accessible = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             list_btn_frame,
-            text="접근가능만",
+            text="열 수 있는 채널만",
             variable=self.filter_accessible
         ).pack(side=tk.LEFT, padx=(5, 0))
 
         # Channel list Treeview
-        channel_frame = ttk.LabelFrame(frame, text="채널 목록 (클릭하여 선택, 더블클릭으로 체크)", padding="5")
+        channel_frame = ttk.LabelFrame(parent=frame, text="채널 목록 (클릭해서 고르고, 더블클릭으로 체크해요)", padding="5")
         channel_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         # Treeview with scrollbar
@@ -304,7 +311,7 @@ class DiscordExporterGUI:
         self.channel_tree.heading("#0", text="채널명", anchor=tk.W)
         self.channel_tree.heading("check", text="✓", anchor=tk.CENTER)
         self.channel_tree.heading("type", text="유형", anchor=tk.W)
-        self.channel_tree.heading("id", text="ID", anchor=tk.W)
+        self.channel_tree.heading("id", text="번호", anchor=tk.W)
 
         self.channel_tree.column("#0", width=180, minwidth=150)
         self.channel_tree.column("check", width=30, minwidth=30, anchor=tk.CENTER)
@@ -330,21 +337,21 @@ class DiscordExporterGUI:
 
         ttk.Button(
             check_btn_frame,
-            text="선택 항목 체크",
+            text="선택한 채널 담기",
             command=self._check_selected_channels,
             width=15
         ).pack(side=tk.LEFT)
 
         ttk.Button(
             check_btn_frame,
-            text="체크 해제",
+            text="담은 채널 비우기",
             command=self._uncheck_all_channels,
-            width=10
+            width=13
         ).pack(side=tk.LEFT, padx=(5, 0))
 
         ttk.Button(
             check_btn_frame,
-            text="전체 체크",
+            text="전부 담기",
             command=self._check_all_channels,
             width=10
         ).pack(side=tk.LEFT, padx=(5, 0))
@@ -353,10 +360,10 @@ class DiscordExporterGUI:
         target_frame = ttk.Frame(frame)
         target_frame.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(target_frame, text="내보내기 대상:").pack(side=tk.LEFT)
+        ttk.Label(target_frame, text="지금 고른 대상:").pack(side=tk.LEFT)
         self.lbl_export_target = ttk.Label(
             target_frame,
-            text="URL을 입력하세요",
+            text="링크를 넣어주세요",
             foreground="gray"
         )
         self.lbl_export_target.pack(side=tk.LEFT, padx=(10, 0))
@@ -370,16 +377,16 @@ class DiscordExporterGUI:
         self.cmb_threads = ttk.Combobox(
             thread_opt_frame,
             textvariable=self.include_threads,
-            values=["none", "active", "all"],
+            values=["안 함", "활성 스레드만", "모두"],
             state="readonly",
             width=15
         )
         self.cmb_threads.pack(side=tk.LEFT, padx=(5, 10))
-        self.cmb_threads.current(2)  # Default to "all"
+        self.cmb_threads.current(2)
 
         ttk.Label(
             thread_opt_frame,
-            text="(서버 전체 내보내기 시 적용)",
+            text="(서버 전체를 저장할 때만 써요)",
             foreground="gray"
         ).pack(side=tk.LEFT)
 
@@ -387,7 +394,7 @@ class DiscordExporterGUI:
         format_frame = ttk.Frame(frame)
         format_frame.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(format_frame, text="출력 형식:", width=12).pack(side=tk.LEFT)
+        ttk.Label(format_frame, text="저장 형식:", width=12).pack(side=tk.LEFT)
 
         format_names = [f[0] for f in self.FORMAT_OPTIONS]
         self.cmb_format = ttk.Combobox(
@@ -441,14 +448,14 @@ class DiscordExporterGUI:
 
         ttk.Checkbutton(
             options_frame,
-            text="미디어 다운로드",
+            text="사진·파일도 받기",
             variable=self.media_enabled,
             command=self._on_media_toggle
         ).pack(side=tk.LEFT)
 
         ttk.Checkbutton(
             options_frame,
-            text="안전 모드 (느리지만 안전)",
+            text="천천히 안전하게",
             variable=self.safe_mode
         ).pack(side=tk.LEFT, padx=(20, 0))
 
@@ -458,13 +465,13 @@ class DiscordExporterGUI:
 
         ttk.Label(
             media_options_frame,
-            text="   └ 제외:",
+            text="   └ 빼기:",
             foreground="gray"
         ).pack(side=tk.LEFT)
 
         self.chk_exclude_avatars = ttk.Checkbutton(
             media_options_frame,
-            text="프로필 이미지",
+            text="프로필 사진",
             variable=self.exclude_avatars
         )
         self.chk_exclude_avatars.pack(side=tk.LEFT)
@@ -482,10 +489,73 @@ class DiscordExporterGUI:
         # Safe mode info
         ttk.Label(
             frame,
-            text="※ 안전 모드: Rate Limit 준수 (기본 ON)",
+            text="※ 천천히 안전하게: 너무 빠르게 요청하지 않도록 도와줘요",
             foreground="gray",
             font=("TkDefaultFont", 9)
         ).pack(anchor=tk.W)
+
+        # Delay configuration: min/max window + random picker
+        delay_frame = ttk.Frame(frame)
+        delay_frame.pack(fill=tk.X, pady=(5, 0))
+
+        ttk.Label(delay_frame, text="쉬는 시간(초):").pack(side=tk.LEFT)
+        ttk.Label(delay_frame, text="최소").pack(side=tk.LEFT, padx=(8, 2))
+        self.ent_delay_min = ttk.Entry(
+            delay_frame, textvariable=self.delay_min, width=6
+        )
+        self.ent_delay_min.pack(side=tk.LEFT)
+        ttk.Label(delay_frame, text="최대").pack(side=tk.LEFT, padx=(8, 2))
+        self.ent_delay_max = ttk.Entry(
+            delay_frame, textvariable=self.delay_max, width=6
+        )
+        self.ent_delay_max.pack(side=tk.LEFT)
+        ttk.Button(
+            delay_frame,
+            text="랜덤",
+            command=self._on_randomize_delay,
+            width=6,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(delay_frame, text="현재:").pack(side=tk.LEFT, padx=(12, 2))
+        ttk.Label(
+            delay_frame,
+            textvariable=self.current_delay,
+            foreground="blue",
+        ).pack(side=tk.LEFT)
+        ttk.Label(delay_frame, text="초", foreground="gray").pack(side=tk.LEFT)
+
+    def _parse_delay_bounds(self) -> tuple[float, float]:
+        """Parse min/max delay fields. Invalid values collapse to 0.
+
+        Returns ``(lo, hi)`` with ``lo <= hi`` and both >= 0. Non-numeric
+        input or negatives are silently treated as 0 so the UI never
+        raises — the worst case is that no delay is applied.
+        """
+        def _clean(raw: str) -> float:
+            try:
+                value = float(raw.strip())
+            except (ValueError, AttributeError):
+                return 0.0
+            return max(0.0, value)
+
+        lo = _clean(self.delay_min.get())
+        hi = _clean(self.delay_max.get())
+        if hi < lo:
+            lo, hi = hi, lo
+        return lo, hi
+
+    def _on_randomize_delay(self):
+        """Pick a random delay in [min, max] and update the display."""
+        lo, hi = self._parse_delay_bounds()
+        picked = random.uniform(lo, hi) if hi > 0 else 0.0
+        self.current_delay.set(f"{picked:.2f}")
+        self._log(f"랜덤 지연 적용: {picked:.2f}초 (범위 {lo:.2f}~{hi:.2f})")
+
+    def _get_current_delay(self) -> float:
+        """Return the currently-applied delay in seconds (0 if unset)."""
+        try:
+            return max(0.0, float(self.current_delay.get()))
+        except (ValueError, AttributeError):
+            return 0.0
 
     def _on_media_toggle(self):
         """Enable/disable exclude options based on media checkbox."""
@@ -532,7 +602,7 @@ class DiscordExporterGUI:
 
         except ValueError:
             self.lbl_export_target.config(
-                text="URL 오류",
+                text="링크를 다시 확인해 주세요",
                 foreground="red"
             )
 
@@ -581,7 +651,7 @@ class DiscordExporterGUI:
             )
         else:
             self.lbl_export_target.config(
-                text="URL 또는 ID를 입력하세요",
+                text="링크나 번호를 넣어주세요",
                 foreground="gray"
             )
 
@@ -592,17 +662,17 @@ class DiscordExporterGUI:
         if not server_id:
             messagebox.showwarning(
                 "서버 ID 필요",
-                "채널 목록을 조회하려면 먼저 서버 ID를 입력하세요."
+                "채널 목록을 보려면 먼저 서버 번호를 넣어주세요."
             )
             return
 
         # Check token and DCE path
         if not self.config.get_token():
-            messagebox.showwarning("토큰 필요", "먼저 토큰을 설정하세요.")
+            messagebox.showwarning("토큰이 필요해요", "먼저 토큰부터 넣어주세요.")
             return
 
         if not self.config.get_dce_path():
-            messagebox.showwarning("DCE 필요", "먼저 DCE 경로를 설정하세요.")
+            messagebox.showwarning("DCE가 필요해요", "먼저 DCE 파일 위치를 정해주세요.")
             return
 
         # Clear existing items
@@ -1023,7 +1093,7 @@ class DiscordExporterGUI:
 
         self.btn_export = ttk.Button(
             btn_frame,
-            text="내보내기 실행",
+            text="저장 시작",
             command=self._on_export,
             width=15
         )
@@ -1040,7 +1110,7 @@ class DiscordExporterGUI:
 
         ttk.Button(
             btn_frame,
-            text="폴더 열기",
+            text="저장 폴더 열기",
             command=self._on_open_folder,
             width=12
         ).pack(side=tk.LEFT)
@@ -1048,7 +1118,7 @@ class DiscordExporterGUI:
         # Status label
         self.lbl_status = ttk.Label(
             frame,
-            text="대기 중",
+            text="준비됐어요",
             foreground="gray"
         )
         self.lbl_status.pack(fill=tk.X, pady=(10, 0))
@@ -1060,7 +1130,7 @@ class DiscordExporterGUI:
         if running:
             self.btn_export.config(state=tk.DISABLED)
             self.btn_stop.config(state=tk.NORMAL)
-            self.lbl_status.config(text="실행 중...", foreground="blue")
+            self.lbl_status.config(text="저장하는 중...", foreground="blue")
         else:
             self.btn_export.config(state=tk.NORMAL)
             self.btn_stop.config(state=tk.DISABLED)
@@ -1070,8 +1140,8 @@ class DiscordExporterGUI:
         if not self.is_running or not self.exporter:
             return
 
-        self._log("중지 요청...", "WARNING")
-        self.lbl_status.config(text="중지 중...", foreground="orange")
+        self._log("멈추는 중이에요...", "WARNING")
+        self.lbl_status.config(text="멈추는 중...", foreground="orange")
         self.btn_stop.config(state=tk.DISABLED)
 
         # Cancel the export
@@ -1082,7 +1152,7 @@ class DiscordExporterGUI:
     # =========================================================================
     def _create_log_area(self, parent):
         """Create the log area."""
-        frame = ttk.LabelFrame(parent, text="로그 (우클릭으로 복사)", padding="5")
+        frame = ttk.LabelFrame(parent, text="기록 (우클릭으로 복사)", padding="5")
         frame.pack(fill=tk.BOTH, expand=True)
 
         # Text widget with scrollbar
@@ -1339,22 +1409,22 @@ class DiscordExporterGUI:
                 return
             self._update_status_bar()
 
-        self._log("검증 시작...")
+            self._log("입력한 내용을 확인하는 중...")
 
         # Run validation
         is_valid, errors = self._validate_inputs()
 
         if not is_valid:
-            self._log("검증 실패!", "ERROR")
+            self._log("확인해 보니 고칠 게 있어요.", "ERROR")
             for error in errors:
                 self._log(f"  - {error}", "ERROR")
-            self.lbl_status.config(text="검증 실패", foreground="red")
+            self.lbl_status.config(text="입력을 다시 봐주세요", foreground="red")
 
             # Show error dialog with solution
             self._show_error_dialog(errors)
             return
 
-        self._log("검증 통과!", "SUCCESS")
+        self._log("좋아요. 바로 시작할게요.", "SUCCESS")
 
         # Check if we have checked channels for batch export
         checked_count = len(self._checked_channels) if hasattr(self, '_checked_channels') else 0
@@ -1370,7 +1440,7 @@ class DiscordExporterGUI:
 
             # Start export in background thread
             self._set_running_state(True)
-            self._log("내보내기 시작...")
+            self._log("저장을 시작할게요...")
 
             # Store media settings for post-export cleanup
             self._export_media_settings = (
@@ -1477,6 +1547,11 @@ class DiscordExporterGUI:
         # Get common options
         format_name = self.selected_format.get()
         format_map = {
+            "웹페이지 (어두운 화면)": ExportFormat.HTML_DARK,
+            "웹페이지 (밝은 화면)": ExportFormat.HTML_LIGHT,
+            "메모용 글 (옵시디언)": ExportFormat.MARKDOWN,
+            "글자만": ExportFormat.PLAIN_TEXT,
+            "JSON 파일": ExportFormat.JSON,
             "HTML (Dark)": ExportFormat.HTML_DARK,
             "HTML (Light)": ExportFormat.HTML_LIGHT,
             "Text": ExportFormat.PLAIN_TEXT,
@@ -1500,6 +1575,7 @@ class DiscordExporterGUI:
             media=self.media_enabled.get(),
             include_threads=None,
             safe_mode=self.safe_mode.get(),
+            delay_seconds=self._get_current_delay(),
         )
 
     def _run_export(self, options: ExportOptions):
@@ -1587,14 +1663,14 @@ class DiscordExporterGUI:
         """Handle export cancellation."""
         self._set_running_state(False)
         self.exporter = None
-        self._log("내보내기가 중지되었습니다.", "WARNING")
-        self.lbl_status.config(text="중지됨", foreground="orange")
+        self._log("저장을 멈췄어요.", "WARNING")
+        self.lbl_status.config(text="멈췄어요", foreground="orange")
 
     def _on_export_complete(self, path: str):
         """Handle export completion."""
         self._set_running_state(False)
         self.exporter = None
-        self._log(f"내보내기 완료: {path}", "SUCCESS")
+        self._log(f"저장이 끝났어요: {path}", "SUCCESS")
 
         # Clean up avatar/emoji files if media was enabled with exclusions
         if hasattr(self, '_export_media_settings'):
@@ -1605,7 +1681,7 @@ class DiscordExporterGUI:
 
         # Show path in status (abbreviated if too long)
         display_path = self._abbreviate_path(path, max_len=50)
-        self.lbl_status.config(text=f"완료: {display_path}", foreground="green")
+        self.lbl_status.config(text=f"끝났어요: {display_path}", foreground="green")
 
         # Store path for folder opening
         self._last_export_path = path
@@ -1653,7 +1729,7 @@ class DiscordExporterGUI:
     def _show_batch_completion_dialog(self, output_dir: str, completed: int, total: int):
         """Show batch completion dialog."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("배치 내보내기 완료")
+        dialog.title("여러 채널 저장 완료")
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.geometry("400x130")
@@ -1668,11 +1744,11 @@ class DiscordExporterGUI:
         # Content
         ttk.Label(
             dialog,
-            text=f"✅ {completed}/{total}개 채널 내보내기 완료!",
+            text=f"✅ 채널 {completed}/{total}개 저장이 끝났어요!",
             font=("TkDefaultFont", 12, "bold")
         ).pack(pady=(15, 5))
 
-        ttk.Label(dialog, text=f"저장 위치: {output_dir}").pack(pady=5)
+        ttk.Label(dialog, text=f"저장된 폴더: {output_dir}").pack(pady=5)
 
         # Buttons
         btn_frame = ttk.Frame(dialog)
@@ -1732,7 +1808,7 @@ class DiscordExporterGUI:
     def _show_completion_dialog(self, path: str):
         """Show completion dialog with Open Folder button."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("내보내기 완료")
+        dialog.title("저장 완료")
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.geometry("450x150")
@@ -1750,7 +1826,7 @@ class DiscordExporterGUI:
         # Success icon and message
         ttk.Label(
             frame,
-            text="내보내기가 완료되었습니다!",
+            text="저장이 끝났어요!",
             font=("TkDefaultFont", 12, "bold")
         ).pack(anchor=tk.W)
 
@@ -1758,7 +1834,7 @@ class DiscordExporterGUI:
         display_path = self._abbreviate_path(path, max_len=55)
         ttk.Label(
             frame,
-            text=f"파일: {display_path}",
+            text=f"파일 위치: {display_path}",
             foreground="gray"
         ).pack(anchor=tk.W, pady=(5, 0))
 
@@ -1817,11 +1893,11 @@ class DiscordExporterGUI:
         self._set_running_state(False)
         self.exporter = None
         self._log(f"오류: {error}", "ERROR")
-        self.lbl_status.config(text="실패", foreground="red")
+        self.lbl_status.config(text="문제가 생겼어요", foreground="red")
 
         messagebox.showerror(
-            "내보내기 실패",
-            f"{error}\n\n해결 방법:\n{solution}"
+            "저장 중 문제가 생겼어요",
+            f"{error}\n\n이렇게 해보세요:\n{solution}"
         )
 
     def _show_error_dialog(self, errors: list):
@@ -1841,17 +1917,17 @@ class DiscordExporterGUI:
         # Remove duplicates
         solutions = list(dict.fromkeys(solutions))
 
-        message = "입력값 검증에 실패했습니다.\n\n"
-        message += "오류:\n"
+        message = "입력한 내용을 다시 확인해 주세요.\n\n"
+        message += "확인할 것:\n"
         for error in errors:
             message += f"• {error}\n"
 
         if solutions:
-            message += "\n해결 방법:\n"
+            message += "\n이렇게 해보세요:\n"
             for solution in solutions:
                 message += f"• {solution}\n"
 
-        messagebox.showwarning("검증 실패", message)
+        messagebox.showwarning("입력을 다시 봐주세요", message)
 
     # =========================================================================
     # Validation & Options Building
@@ -1875,6 +1951,17 @@ class DiscordExporterGUI:
             if name == selected:
                 return fmt
         return ExportFormat.HTML_DARK
+
+    def _get_include_threads_value(self) -> str:
+        """Return the saved/API value for the selected thread option."""
+        return {
+            "안 함": "none",
+            "활성 스레드만": "active",
+            "모두": "all",
+            "none": "none",
+            "active": "active",
+            "all": "all",
+        }.get(self.include_threads.get(), "all")
 
     def _validate_inputs(self) -> tuple[bool, list[str]]:
         """
@@ -1966,7 +2053,7 @@ class DiscordExporterGUI:
         elif server_id:
             # Guild export
             export_guild_id = server_id
-            include_threads = self.include_threads.get()
+            include_threads = self._get_include_threads_value()
 
         output_dir = self.ent_output_dir.get().strip() or None
 
@@ -1989,6 +2076,7 @@ class DiscordExporterGUI:
             media=self.media_enabled.get(),
             include_threads=include_threads,
             safe_mode=self.safe_mode.get(),
+            delay_seconds=self._get_current_delay(),
         )
 
     # =========================================================================
@@ -2006,9 +2094,18 @@ class DiscordExporterGUI:
 
         # Export format
         export_format = settings.get('export_format')
-        if export_format and export_format in [f[0] for f in self.FORMAT_OPTIONS]:
-            self.selected_format.set(export_format)
-            self.cmb_format.set(export_format)
+        format_aliases = {
+            "HTML (Dark)": "웹페이지 (어두운 화면)",
+            "HTML (Light)": "웹페이지 (밝은 화면)",
+            "Markdown (Obsidian)": "메모용 글 (옵시디언)",
+            "Plain Text": "글자만",
+            "JSON": "JSON 파일",
+        }
+        if export_format:
+            mapped_format = format_aliases.get(export_format, export_format)
+            if mapped_format in [f[0] for f in self.FORMAT_OPTIONS]:
+                self.selected_format.set(mapped_format)
+                self.cmb_format.set(mapped_format)
 
         # Media options
         if 'media_enabled' in settings:
@@ -2020,13 +2117,26 @@ class DiscordExporterGUI:
 
         # Thread option
         include_threads = settings.get('include_threads')
-        if include_threads and include_threads in ['none', 'active', 'all']:
-            self.include_threads.set(include_threads)
-            self.cmb_threads.set(include_threads)
+        thread_aliases = {
+            'none': '안 함',
+            'active': '활성 스레드만',
+            'all': '모두',
+        }
+        if include_threads:
+            mapped_threads = thread_aliases.get(include_threads, include_threads)
+            if mapped_threads in ['안 함', '활성 스레드만', '모두']:
+                self.include_threads.set(mapped_threads)
+                self.cmb_threads.set(mapped_threads)
 
         # Safe mode
         if 'safe_mode' in settings:
             self.safe_mode.set(settings['safe_mode'])
+
+        # Delay bounds
+        if 'delay_min' in settings:
+            self.delay_min.set(str(settings['delay_min']))
+        if 'delay_max' in settings:
+            self.delay_max.set(str(settings['delay_max']))
 
         # Filter text channels only
         if 'filter_text_only' in settings:
@@ -2047,8 +2157,10 @@ class DiscordExporterGUI:
             'media_enabled': self.media_enabled.get(),
             'exclude_avatars': self.exclude_avatars.get(),
             'exclude_emojis': self.exclude_emojis.get(),
-            'include_threads': self.include_threads.get(),
+            'include_threads': self._get_include_threads_value(),
             'safe_mode': self.safe_mode.get(),
+            'delay_min': self.delay_min.get(),
+            'delay_max': self.delay_max.get(),
             'filter_text_only': self.filter_text_only.get(),
             'filter_accessible': self.filter_accessible.get(),
         }
@@ -2076,7 +2188,7 @@ class TokenDialog:
         self.was_saved = False  # Track if token was saved
 
         self.top = tk.Toplevel(parent)
-        self.top.title("토큰 설정")
+        self.top.title("토큰 넣기")
         self.top.transient(parent)
         self.top.grab_set()
 
@@ -2092,14 +2204,14 @@ class TokenDialog:
         # Current status (masked!)
         current_token = self.config.get_token()
         if current_token:
-            status_text = f"현재 토큰: {self.config.mask_token(current_token)}"
+            status_text = f"지금 저장된 토큰: {self.config.mask_token(current_token)}"
         else:
-            status_text = "현재 토큰: 미설정"
+            status_text = "지금 저장된 토큰: 없음"
 
         ttk.Label(frame, text=status_text).pack(anchor=tk.W)
 
         # Help text for first-time users
-        help_text = "Discord 개발자 도구(F12) → Network → authorization 헤더에서 토큰을 복사하세요."
+        help_text = "디스코드에서 F12를 누른 뒤 Network에서 authorization 값을 복사해 넣어주세요."
         help_label = ttk.Label(frame, text=help_text, foreground="gray")
         help_label.pack(anchor=tk.W, pady=(5, 0))
 
@@ -2151,10 +2263,10 @@ class TokenDialog:
         if token:
             self.config.set_token(token)
             self.was_saved = True
-            messagebox.showinfo("완료", "토큰이 저장되었습니다.")
+            messagebox.showinfo("좋아요", "토큰을 저장했어요.")
             self.top.destroy()
         else:
-            messagebox.showwarning("경고", "토큰을 입력해주세요.")
+            messagebox.showwarning("잠깐", "토큰을 먼저 넣어주세요.")
 
 
 def main():

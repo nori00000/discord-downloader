@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "discord-exporter"
+name = "discord-downloader"
 version = "1.1.0"
 description = "A CLI wrapper for DiscordChatExporter.Cli - Export Discord chat logs easily"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
-    {name = "Discord Exporter"}
+    {name = "Discord Downloader"}
 ]
 keywords = ["discord", "chat", "export", "cli", "backup"]
 classifiers = [
@@ -40,14 +40,16 @@ dev = [
 ]
 
 [project.scripts]
+discord-downloader = "discord_exporter.cli:main"
 discord-exporter = "discord_exporter.cli:main"
 
 [project.gui-scripts]
+discord-downloader-gui = "discord_exporter.gui:main"
 discord-exporter-gui = "discord_exporter.gui:main"
 
 [project.urls]
-Homepage = "https://github.com/your-username/discord-exporter"
-Repository = "https://github.com/your-username/discord-exporter"
+Homepage = "https://github.com/nori00000/discord-downloader"
+Repository = "https://github.com/nori00000/discord-downloader"
 
 [tool.setuptools.packages.find]
 where = ["."]

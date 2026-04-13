@@ -6,6 +6,7 @@ Handles the actual invocation of DiscordChatExporter.Cli.
 
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -39,6 +40,7 @@ class ExportOptions:
     media: bool = False
     include_threads: Optional[str] = None  # none, active, all
     safe_mode: bool = False  # Slower but safer (--parallel 1, delays)
+    delay_seconds: float = 0.0  # Pre-export sleep to spread out DCE calls
 
 
 class ExportError(Exception):
@@ -241,10 +243,30 @@ class Exporter:
 
         return ' '.join(display_parts)
 
+    def _sleep_with_cancel(self, seconds: float, log_callback: Optional[LogCallback] = None) -> None:
+        """Sleep in small slices so cancellation is responsive.
+
+        Logs the delay once via the callback if provided. No-op for
+        non-positive durations.
+        """
+        if seconds <= 0:
+            return
+        if log_callback is not None:
+            log_callback(LogEvent(
+                level=LogLevel.INFO,
+                message=f"지연 적용: {seconds:.2f}초"
+            ))
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if self._cancelled:
+                return
+            time.sleep(min(0.1, deadline - time.monotonic()))
+
     def _run_command_streaming(
         self,
         cmd: list[str],
-        log_callback: LogCallback
+        log_callback: LogCallback,
+        delay_seconds: float = 0.0,
     ) -> int:
         """
         Run DCE command with streaming output.
@@ -275,6 +297,11 @@ class Exporter:
             level=LogLevel.INFO,
             message=f"실행: {display_cmd}"
         ))
+
+        # Pre-export delay to spread out API load (respects cancel)
+        self._sleep_with_cancel(delay_seconds, log_callback)
+        if self._cancelled:
+            return -1
 
         try:
             # Start process with pipes.
@@ -508,7 +535,9 @@ class Exporter:
 
         # Use streaming if callback provided, otherwise use blocking
         if log_callback:
-            return_code = self._run_command_streaming(cmd, callback)
+            return_code = self._run_command_streaming(
+                cmd, callback, delay_seconds=options.delay_seconds,
+            )
 
             # Check if cancelled first (return code -1)
             if self._cancelled:
@@ -523,6 +552,7 @@ class Exporter:
                     f"내보내기 실패 (종료 코드: {return_code})"
                 )
         else:
+            self._sleep_with_cancel(options.delay_seconds)
             result = self._run_command(cmd)
             # Print output (sanitized)
             token = self._get_token()
@@ -616,7 +646,9 @@ class Exporter:
 
         # Use streaming if callback provided, otherwise use blocking
         if log_callback:
-            return_code = self._run_command_streaming(cmd, callback)
+            return_code = self._run_command_streaming(
+                cmd, callback, delay_seconds=options.delay_seconds,
+            )
 
             # Check if cancelled first (return code -1)
             if self._cancelled:
@@ -631,6 +663,7 @@ class Exporter:
                     f"내보내기 실패 (종료 코드: {return_code})"
                 )
         else:
+            self._sleep_with_cancel(options.delay_seconds)
             result = self._run_command(cmd)
             # Print output (sanitized)
             token = self._get_token()
@@ -688,7 +721,9 @@ class Exporter:
         # Use streaming if callback provided, otherwise blocking for
         # backward compatibility with existing CLI callers.
         if log_callback:
-            return_code = self._run_command_streaming(cmd, callback)
+            return_code = self._run_command_streaming(
+                cmd, callback, delay_seconds=options.delay_seconds,
+            )
 
             if self._cancelled:
                 callback(LogEvent(
@@ -702,6 +737,7 @@ class Exporter:
                     f"내보내기 실패 (종료 코드: {return_code})"
                 )
         else:
+            self._sleep_with_cancel(options.delay_seconds)
             result = self._run_command(cmd)
             token = self._get_token()
             if result.stdout:
