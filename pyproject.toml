@@ -46,8 +46,8 @@ discord-exporter = "discord_exporter.cli:main"
 discord-exporter-gui = "discord_exporter.gui:main"
 
 [project.urls]
-Homepage = "https://github.com/your-username/discord-exporter"
-Repository = "https://github.com/your-username/discord-exporter"
+Homepage = "https://github.com/nori00000/discord-downloader"
+Repository = "https://github.com/nori00000/discord-downloader"
 
 [tool.setuptools.packages.find]
 where = ["."]

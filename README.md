@@ -1,5 +1,12 @@
 # Discord Exporter
 
+> **한눈에 / At a glance**
+>
+> A cross-platform CLI/GUI wrapper around DiscordChatExporter.Cli for exporting Discord chat logs into local files.
+>
+> 한영 프로젝트 설명, 검색 키워드, 저작권 범위: [PROJECT.md](./PROJECT.md) · [NOTICE.md](./NOTICE.md) · [PUBLICATION_REVIEW.md](./PUBLICATION_REVIEW.md)
+
+
 ![CI](https://github.com/nori00000/discord-exporter/actions/workflows/test.yml/badge.svg)
 
 [DiscordChatExporter.Cli](https://github.com/Tyrrrz/DiscordChatExporter)를 쉽게 사용하기 위한 크로스 플랫폼 CLI/GUI 래퍼 도구입니다.
