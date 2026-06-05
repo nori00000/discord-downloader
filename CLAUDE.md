@@ -61,7 +61,7 @@ discord_exporter/
 ├── utils.py       # 유틸리티 (공용)
 ├── exporter.py    # DCE 호출 로직 (공용)
 ├── cli.py         # CLI 프론트엔드
-└── gui.py         # GUI 프론트엔드 (예정)
+└── gui.py         # GUI 프론트엔드
 ```
 
 - `exporter.py`는 CLI/GUI 모두에서 재사용

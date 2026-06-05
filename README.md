@@ -23,7 +23,7 @@
 
 ## 사전 요구사항
 
-1. **Python 3.8 이상**
+1. **Python 3.9 이상**
 2. **DiscordChatExporter.Cli** - [릴리즈 페이지](https://github.com/Tyrrrz/DiscordChatExporter/releases)에서 다운로드
 
 ### DiscordChatExporter.Cli 다운로드
@@ -137,8 +137,8 @@ discord-exporter-gui
    - "찾아보기" 클릭 → DiscordChatExporter.Cli 파일 선택
 
 2. **내보내기 실행**
-   - 입력 방식 선택: "채널 URL" 또는 "채널 ID"
-   - Discord에서 채널 URL 복사하여 붙여넣기
+   - Discord 채널 URL을 상단 URL 필드에 붙여넣기 → 서버/채널 ID 자동 분석
+   - 또는 서버 ID / 채널 ID 필드에 직접 입력
    - 출력 형식 선택 (HTML Dark 권장)
    - "내보내기 실행" 클릭
 
@@ -274,9 +274,13 @@ Markdown 내보내기는 내부적으로 DCE의 JSON 익스포트를 돌린 뒤 
 
 ## 출력 파일명
 
-기본 파일명 형식: `channel-<채널ID>-<YYYYMMDD-HHMMSS>.<확장자>`
+기본 파일명 형식: `<채널명>.<확장자>` (DCE의 `%C` 패턴 — 채널 이름으로 자동 치환)
 
-예: `channel-987654321-20240115-143022.html`
+예: `general.html`, `announcement.json`, `notice.md`
+
+서버 전체(`exportguild`) 내보내기 시에는 `guild-<서버ID>-<YYYYMMDD-HHMMSS>/` 하위 디렉터리가 생성되고, 그 안에 채널별 파일이 저장됩니다.
+
+DM 전체(`exportdm`) 내보내기 시에는 `dm-export-<YYYYMMDD-HHMMSS>/` 하위 디렉터리가 생성됩니다.
 
 ## 문제 해결
 

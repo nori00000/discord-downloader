@@ -2,7 +2,16 @@
 
 > **버전**: 1.0
 > **작성일**: 2025-01-13
-> **상태**: 설계 완료, 구현 대기
+> **상태**: 구현 완료 (초기 설계 문서 — 실제 구현과 일부 차이 있음, 아래 참고)
+>
+> **설계 대비 실제 구현 차이**:
+> - `ent_channel` (단일 입력) → `ent_url` + `ent_server_id` + `ent_channel_id` + `ent_thread_id` (4개 독립 필드)
+> - `btn_toggle_mode` (URL↔ID 전환 버튼) → 없음; URL 자동 분석 후 ID 필드에 자동 입력
+> - `radio_format` (Radiobutton, 4개) → `cmb_format` (Combobox, 6개 — Markdown/CSV 추가됨)
+> - `btn_settings` (설정 버튼) → 없음; 상태바의 "토큰 설정" + "찾아보기" 버튼으로 분리
+> - `progress` (Progressbar) → 없음; `lbl_status` (Label) 로 상태 표시
+> - RUNNING 상태: `btn_export` → "취소" 표시 아님; `btn_export` 비활성화 + `btn_stop` 별도 활성화
+> - 채널 목록 조회(Treeview) + 배치 내보내기 기능 추가됨 (설계에 없던 기능)
 
 ---
 
@@ -56,21 +65,28 @@
 |---------|------|------|--------|------|------|
 | `lbl_token_status` | Label | 토큰 상태 | "미설정" | - | ✓/✗ + "설정됨"/"미설정" |
 | `lbl_dce_status` | Label | DCE 상태 | "미설정" | - | ✓/✗ + 경로 또는 "미설정" |
-| `lbl_state` | Label | 현재 상태 | "대기 중" | - | 상태 머신 반영 |
-| `ent_channel` | Entry | 채널 URL/ID | "" | **필수** | URL 또는 숫자 ID |
-| `btn_toggle_mode` | Button | 입력 모드 전환 | "URL" | - | URL ↔ ID 전환 |
-| `radio_format` | Radiobutton | 출력 형식 | "HtmlDark" | **필수** | 4개 옵션 |
+| `lbl_status` | Label | 현재 상태 | "대기 중" | - | 실행 영역 하단, 상태 머신 반영 |
+| `ent_url` | Entry | Discord URL | placeholder | - | URL 자동 분석 → ID 필드 채움 |
+| `ent_server_id` | Entry | 서버 ID | "" | 선택 | URL 분석 자동 입력 또는 직접 입력 |
+| `ent_channel_id` | Entry | 채널 ID | "" | 선택 | URL 분석 자동 입력 또는 직접 입력 |
+| `ent_thread_id` | Entry | 스레드 ID | "" | 선택 | URL 분석 자동 입력 또는 직접 입력 |
+| `cmb_format` | Combobox | 출력 형식 | "HTML (Dark)" | **필수** | 6개 옵션 (HTML Dark/Light, Markdown, Plain Text, JSON, CSV) |
 | `ent_output_dir` | Entry | 출력 폴더 | 현재 디렉터리 | 선택 | 비어있으면 CWD |
-| `btn_browse` | Button | 찾아보기 | - | - | 폴더 선택 다이얼로그 |
+| `btn_browse_output` | Button | 찾아보기 | - | - | 출력 폴더 선택 다이얼로그 |
 | `ent_after` | Entry | 시작일 | "" | 선택 | YYYY-MM-DD 형식 |
 | `ent_before` | Entry | 종료일 | "" | 선택 | YYYY-MM-DD 형식 |
-| `chk_media` | Checkbutton | 미디어 다운로드 | False | 선택 | --media 옵션 |
-| `btn_export` | Button | 내보내기 실행 | - | - | 메인 액션 |
-| `btn_settings` | Button | 설정 | - | - | 토큰/DCE 설정 다이얼로그 |
+| `media_enabled` | Checkbutton | 미디어 다운로드 | False | 선택 | --media 옵션 |
+| `safe_mode` | Checkbutton | 안전 모드 | True | 선택 | --parallel 1 옵션 |
+| `btn_export` | Button | 내보내기 실행 | - | - | 메인 액션; 실행 중 비활성화 |
+| `btn_stop` | Button | 중지 | - | - | 실행 중에만 활성화; 취소 신호 전송 |
 | `btn_open_folder` | Button | 폴더 열기 | - | - | 출력 폴더 열기 |
-| `progress` | Progressbar | 진행률 | 0 | - | indeterminate 모드 |
+| `channel_tree` | Treeview | 채널 목록 | - | - | 채널 조회 + 배치 선택 체크박스 |
 | `txt_log` | Text | 로그 | "" | - | 읽기 전용, 스크롤 |
 | `btn_clear_log` | Button | 로그 지우기 | - | - | 로그 초기화 |
+
+> **설계 원본과의 차이**: `btn_toggle_mode`, `btn_settings`, `progress`(Progressbar)는 구현에서 제거됨.
+> `ent_channel` 단일 필드 → `ent_url` + `ent_server_id/channel_id/thread_id` 3개 독립 필드로 분리.
+> `radio_format` → `cmb_format` (Combobox, 옵션 수 4→6)으로 변경.
 
 ---
 
@@ -122,13 +138,17 @@
 
 ### 상태별 UI 동작
 
-| 상태 | btn_export | 입력 필드 | progress | 로그 |
-|------|------------|----------|----------|------|
-| IDLE | 활성화 "내보내기" | 편집 가능 | 숨김 | 유지 |
-| VALIDATING | 비활성화 | 비활성화 | indeterminate | "검증 중..." |
-| RUNNING | "취소" 표시 | 비활성화 | indeterminate | 실시간 업데이트 |
-| DONE | 활성화 | 편집 가능 | 100% (녹색) | "완료" 메시지 |
-| FAILED | 활성화 | 편집 가능 | 0% (빨간색) | 에러 메시지 |
+| 상태 | btn_export | btn_stop | 입력 필드 | lbl_status | 로그 |
+|------|------------|----------|----------|------------|------|
+| IDLE | 활성화 "내보내기 실행" | 비활성화 | 편집 가능 | "대기 중" (gray) | 유지 |
+| VALIDATING | 비활성화 | 비활성화 | 편집 가능 | — | "검증 시작..." |
+| RUNNING | 비활성화 | **활성화 "중지"** | 편집 가능 | "실행 중..." (blue) | 실시간 업데이트 |
+| DONE | 활성화 | 비활성화 | 편집 가능 | "완료: [경로]" (green) | "완료" 메시지 |
+| FAILED | 활성화 | 비활성화 | 편집 가능 | "실패" (red) | 에러 메시지 |
+
+> **설계 원본과의 차이**: RUNNING 상태에서 `btn_export`가 "취소"로 변경되는 방식 대신,
+> `btn_export` 비활성화 + 별도 `btn_stop` 활성화 방식으로 구현됨.
+> `progress` Progressbar 없음; `lbl_status` Label로 상태 표시.
 
 ---
 
@@ -234,21 +254,25 @@ if token_exists:
 
 | 파일 | 상태 | 변경 내용 |
 |------|------|----------|
-| `discord_exporter/gui.py` | **신규** | 메인 GUI 애플리케이션 |
-| `discord_exporter/gui_dialogs.py` | **신규** | 설정 다이얼로그 (토큰/DCE) |
-| `pyproject.toml` | 수정 | GUI 엔트리포인트 추가 |
+| `discord_exporter/gui.py` | **완료** | 메인 GUI 애플리케이션 (설정 다이얼로그 포함) |
+| `pyproject.toml` | **완료** | GUI 엔트리포인트 추가됨 |
 | `discord_exporter/config.py` | 유지 | 재사용 (수정 없음) |
 | `discord_exporter/utils.py` | 유지 | 재사용 (수정 없음) |
 | `discord_exporter/exporter.py` | 유지 | 재사용 (수정 없음) |
 | `discord_exporter/cli.py` | 유지 | 재사용 (수정 없음) |
 
-### 엔트리포인트 추가 예정
+> **참고**: 당초 설계에서 별도 파일로 계획했던 `gui_dialogs.py`(설정 다이얼로그)는
+> `gui.py` 내부 클래스로 통합되어 별도 파일로 생성되지 않았습니다.
+
+### 엔트리포인트 (적용 완료)
 
 ```toml
 # pyproject.toml
 [project.scripts]
 discord-exporter = "discord_exporter.cli:main"
-discord-exporter-gui = "discord_exporter.gui:main"  # 추가
+
+[project.gui-scripts]
+discord-exporter-gui = "discord_exporter.gui:main"
 ```
 
 ---
