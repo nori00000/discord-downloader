@@ -7,7 +7,7 @@
 > 한영 프로젝트 설명, 검색 키워드, 저작권 범위: [PROJECT.md](./PROJECT.md) · [NOTICE.md](./NOTICE.md) · [PUBLICATION_REVIEW.md](./PUBLICATION_REVIEW.md)
 
 
-![CI](https://github.com/nori00000/discord-exporter/actions/workflows/test.yml/badge.svg)
+![CI](https://github.com/nori00000/discord-downloader/actions/workflows/test.yml/badge.svg)
 
 [DiscordChatExporter.Cli](https://github.com/Tyrrrz/DiscordChatExporter)를 쉽게 사용하기 위한 크로스 플랫폼 CLI/GUI 래퍼 도구입니다.
 
@@ -18,8 +18,10 @@
 - 날짜 범위 지정 내보내기 (단일 채널/서버/DM)
 - 서버 전체(guild) / DM 전체 일괄 내보내기
 - 토큰 안전 저장 (로컬 파일, `chmod 600`, 외부 전송 없음)
+- GUI: 채널 목록 조회 및 다중 채널 배치 내보내기
+- GUI: 미디어 다운로드 후 아바타/이모지 자동 정리 옵션
 - GUI (tkinter) / CLI 두 가지 인터페이스
-- macOS (Apple Silicon) 및 Windows 지원
+- macOS (Apple Silicon) / Windows / Linux 지원
 
 ## 사전 요구사항
 
@@ -34,6 +36,7 @@
 | macOS (Intel) | `DiscordChatExporter.Cli.osx-x64.zip` |
 | Windows (64-bit) | `DiscordChatExporter.Cli.win-x64.zip` |
 | Windows (ARM) | `DiscordChatExporter.Cli.win-arm64.zip` |
+| Linux (64-bit) | `DiscordChatExporter.Cli.linux-x64.zip` |
 
 ## 설치
 
@@ -97,9 +100,13 @@ discord-exporter setup --dce-path "C:\Tools\DiscordChatExporter\DiscordChatExpor
 ### 환경 변수로 설정 (선택사항)
 
 ```bash
-# macOS/Linux (.zshrc 또는 .bashrc에 추가)
+# macOS (.zshrc 또는 .bashrc에 추가)
 export DISCORD_TOKEN="your-token-here"
 export DCE_PATH="$HOME/Downloads/DiscordChatExporter.Cli.osx-arm64/DiscordChatExporter.Cli"
+
+# Linux (.zshrc 또는 .bashrc에 추가)
+export DISCORD_TOKEN="your-token-here"
+export DCE_PATH="$HOME/Downloads/DiscordChatExporter.Cli.linux-x64/DiscordChatExporter.Cli"
 
 # Windows (PowerShell 프로필에 추가)
 $env:DISCORD_TOKEN = "your-token-here"
@@ -137,8 +144,8 @@ discord-exporter-gui
    - "찾아보기" 클릭 → DiscordChatExporter.Cli 파일 선택
 
 2. **내보내기 실행**
-   - Discord 채널 URL을 상단 URL 필드에 붙여넣기 → 서버/채널 ID 자동 분석
-   - 또는 서버 ID / 채널 ID 필드에 직접 입력
+   - Discord 채널 URL을 상단 URL 필드에 붙여넣기 → 서버/채널/스레드 ID 자동 분석
+   - 또는 서버 ID / 채널 ID / 스레드 ID 필드에 직접 입력
    - 출력 형식 선택 (HTML Dark 권장)
    - "내보내기 실행" 클릭
 
@@ -153,8 +160,8 @@ discord-exporter-gui
 | "토큰이 설정되지 않았습니다" | 토큰 미입력 | 상태바 "토큰 설정" 클릭 → 토큰 입력 |
 | "DCE 파일을 찾을 수 없습니다" | DCE 경로 잘못됨 | "찾아보기"로 DCE 파일 다시 선택 |
 | "DCE 파일에 실행 권한이 없습니다" | macOS 권한 문제 | 터미널에서 `chmod +x /path/to/DCE` 실행 |
-| "URL 형식을 인식할 수 없습니다" | 잘못된 URL | Discord에서 채널 URL 다시 복사 |
-| "시작일이 종료일보다 늦습니다" | 날짜 순서 오류 | 시작일을 종료일보다 이전으로 수정 |
+| "URL 오류" (내보내기 대상 표시란 인라인) | 잘못된 Discord URL 형식 | Discord에서 채널 URL 다시 복사 또는 채널 ID 직접 입력 |
+| "시작일이 종료일보다 늦거나 같습니다" | 날짜 순서 오류 | 시작일을 종료일보다 이전으로 수정 |
 | "폴더에 쓰기 권한이 없습니다" | 출력 폴더 권한 | 다른 폴더 선택 또는 권한 변경 |
 
 ### Discord 채널 URL 복사 방법
@@ -262,6 +269,8 @@ Markdown 내보내기는 내부적으로 DCE의 JSON 익스포트를 돌린 뒤 
 | 옵션 | 설명 |
 |-----|------|
 | (export와 동일한 옵션들, URL/ID 제외) | |
+
+> **참고**: `--include-threads`는 DM 채널에 스레드가 없으므로 exportdm에서 전달해도 무시됩니다.
 
 ## 설정 파일 위치
 

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Repository | `nori00000/discord-downloader` |
-| Worktree | `<local-public-readiness-worktree>|
+| Worktree | `<local-public-readiness-worktree>` |
 | Public readiness | `ready-for-final-visibility-approval` |
 | Proposed visibility | `public after checks pass` |
 | Code license | MIT |

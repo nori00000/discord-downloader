@@ -81,6 +81,7 @@ class ExportOptions:
     before: Optional[str] = None          # YYYY-MM-DD
     media: bool = False                   # --media 옵션
     include_threads: Optional[str] = None # none/active/all
+    safe_mode: bool = False               # --parallel 1 옵션 (설계 이후 추가)
 ```
 
 ### 3.2 로그 이벤트 모델 (신규)
@@ -102,9 +103,9 @@ class LogLevel(Enum):
 class LogEvent:
     """GUI/CLI로 전달되는 로그 이벤트"""
     level: LogLevel
-    message: str                    # 마스킹 적용된 메시지
-    timestamp: str                  # HH:MM:SS 형식
-    raw_line: Optional[str] = None  # DCE 원본 출력 (마스킹됨)
+    message: str         # 마스킹 적용된 메시지
+    timestamp: str = ""  # HH:MM:SS 형식 (auto-generated in __post_init__)
+    # ※ 설계 당시 raw_line 필드 있었으나 최종 구현에서 제거됨 (서두 참고)
 ```
 
 ### 3.3 콜백 타입 정의
@@ -115,9 +116,16 @@ from typing import Callable, Optional
 # 로그 콜백: GUI에서 로그 표시에 사용
 LogCallback = Callable[[LogEvent], None]
 
-# 기본 콜백 (CLI용): print로 출력
+# 기본 콜백 (CLI용): 레벨별 prefix 추가 후 stdout 출력
 def default_log_callback(event: LogEvent) -> None:
-    print(f"[{event.timestamp}] {event.message}")
+    prefix = ""
+    if event.level == LogLevel.ERROR:
+        prefix = "[ERROR] "
+    elif event.level == LogLevel.WARNING:
+        prefix = "[WARN] "
+    elif event.level == LogLevel.SUCCESS:
+        prefix = "[OK] "
+    print(f"[{event.timestamp}] {prefix}{event.message}")
 ```
 
 ### 3.4 Exporter 메서드 시그니처 변경

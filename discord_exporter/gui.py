@@ -1474,17 +1474,9 @@ class DiscordExporterGUI:
 
     def _build_export_options_for_channel(self, channel_id: str) -> Optional[ExportOptions]:
         """Build ExportOptions for a specific channel ID."""
-        # Get common options
-        format_name = self.selected_format.get()
-        format_map = {
-            "HTML (Dark)": ExportFormat.HTML_DARK,
-            "HTML (Light)": ExportFormat.HTML_LIGHT,
-            "Text": ExportFormat.PLAIN_TEXT,
-            "JSON": ExportFormat.JSON,
-            "CSV": ExportFormat.CSV,
-            "Markdown": ExportFormat.MARKDOWN,
-        }
-        export_format = format_map.get(format_name, ExportFormat.HTML_DARK)
+        # Reuse _get_export_format() so format resolution stays in sync with
+        # FORMAT_OPTIONS display names — avoids key-mismatch silent fallback.
+        export_format = self._get_export_format()
 
         output_dir = self.ent_output_dir.get().strip() or None
         after = self._get_entry_value(self.ent_after)

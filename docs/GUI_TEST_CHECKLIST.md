@@ -55,16 +55,24 @@ python -m discord_exporter.gui
 
 **재현 방법**:
 1. Discord URL 입력란에 다음 중 하나 입력:
-   - `https://google.com/channels/123/456`
+   - `https://google.com/channels/123/456` ← 아래 주의사항 참조
    - `https://discord.com/channels/123`
    - `https://discord.com/channels/abc/def`
    - `discord.com/channels/123/456` (http:// 없음)
 2. "내보내기 실행" 클릭
 
+> **⚠️ 주의 (코드 동작 기준)**:
+> `gui.py:_on_parse_url`은 `"discord.com/channels"` 포함 여부로 파싱 진입을 결정합니다.
+> - `https://google.com/channels/123/456` → 포함되지 않아 **조기 반환** → `lbl_export_target` 미변경 (URL 오류 표시 없음)
+> - 나머지 3개 케이스 → `parse_discord_url_extended()` ValueError → `"URL 오류"` 인라인 표시
+>
+> `"URL 오류"` 표시 테스트 시에는 **discord.com URL 케이스** (`https://discord.com/channels/123` 등)를 사용하세요.
+
 **예상 결과**:
-- [ ] 에러 다이얼로그에 구체적인 문제점 표시
-- [ ] "올바른 예시: https://discord.com/channels/123456789/987654321" 안내 포함
-- [ ] 로그에 상세 에러 메시지 기록
+- [ ] `lbl_export_target`에 `"URL 오류"` 빨간색 인라인 표시 (다이얼로그 없음, `gui.py:_on_parse_url`) — `https://discord.com/channels/123` 등 discord.com 케이스에 한함
+- [ ] `https://google.com/channels/123/456` 입력 시 lbl_export_target 미변경 (조기 반환)
+- [ ] 로그에 별도 메시지 없음 (URL 오류는 인라인 표시만)
+- [ ] 이후 "내보내기 실행" 클릭 시 E4 다이얼로그 표시 ("내보내기 대상이 없습니다.\nDiscord URL을 입력하거나 채널을 체크해주세요.") — 모든 케이스 공통
 
 ---
 
@@ -78,7 +86,7 @@ python -m discord_exporter.gui
 2. "내보내기 실행" 클릭
 
 **예상 결과**:
-- [ ] "채널 ID는 17-20자리 숫자여야 합니다" 에러 표시
+- [ ] "채널 ID 오류: Channel ID should be 17-20 digits, got N digits" 에러 표시 (gui.py가 영문 ValueError를 "채널 ID 오류: " 접두어로 래핑)
 - [ ] 입력된 길이 정보 포함
 
 ---
@@ -183,8 +191,8 @@ rm -rf /tmp/readonly_folder
 3. "내보내기 실행" 클릭
 
 **예상 결과**:
-- [ ] "채널 URL 또는 ID를 입력해주세요" 에러 표시
-- [ ] 올바른 예시 URL 안내 포함
+- [ ] "내보내기 대상이 없습니다." 에러 표시 (gui.py `_validate_inputs` 실제 메시지)
+- [ ] "Discord URL을 입력하거나 채널을 체크해주세요." 안내 포함
 - [ ] 에러 다이얼로그가 사용자 친화적 메시지 표시
 
 ---

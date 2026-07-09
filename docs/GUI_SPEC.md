@@ -72,21 +72,32 @@
 | `ent_thread_id` | Entry | 스레드 ID | "" | 선택 | URL 분석 자동 입력 또는 직접 입력 |
 | `cmb_format` | Combobox | 출력 형식 | "HTML (Dark)" | **필수** | 6개 옵션 (HTML Dark/Light, Markdown, Plain Text, JSON, CSV) |
 | `ent_output_dir` | Entry | 출력 폴더 | 현재 디렉터리 | 선택 | 비어있으면 CWD |
-| `btn_browse_output` | Button | 찾아보기 | - | - | 출력 폴더 선택 다이얼로그 |
+| `btn_browse_output`<sup>†</sup> | Button | 찾아보기 | - | - | 출력 폴더 선택 다이얼로그 |
 | `ent_after` | Entry | 시작일 | "" | 선택 | YYYY-MM-DD 형식 |
 | `ent_before` | Entry | 종료일 | "" | 선택 | YYYY-MM-DD 형식 |
 | `media_enabled` | Checkbutton | 미디어 다운로드 | False | 선택 | --media 옵션 |
 | `safe_mode` | Checkbutton | 안전 모드 | True | 선택 | --parallel 1 옵션 |
+| `chk_exclude_avatars` / `exclude_avatars` | Checkbutton | 프로필 이미지 제외 | True | 선택 | 미디어 다운로드 시 아바타 파일 자동 삭제; media_enabled=False이면 비활성화 |
+| `chk_exclude_emojis` / `exclude_emojis` | Checkbutton | 이모지 제외 | True | 선택 | 미디어 다운로드 시 이모지 파일 자동 삭제; media_enabled=False이면 비활성화 |
+| `filter_text_only` | Checkbutton | 텍스트만 | True | 선택 | 채널 목록 조회 시 음성 채널 제외 (--include-vc False 전달) |
+| `filter_accessible` | Checkbutton | 접근가능만 | False | 선택 | 채널 목록 조회 후 접근 권한 확인 (ThreadPoolExecutor 10개 병렬 테스트) |
+| `lbl_export_target` | Label | 내보내기 대상 | `"URL을 입력하세요"` (gray) — 첫 `_update_export_target()` 호출 후 `"URL 또는 ID를 입력하세요"`로 변경 | - | URL 파싱 또는 ID 직접 입력에 따라 대상 표시; URL 오류 시 `"URL 오류"` (red); 체크된 채널 수 표시 가능 |
+| `cmb_threads` | Combobox | 스레드 포함 | `"all"` | 선택 | `"none"` / `"active"` / `"all"`; 서버 전체 내보내기(`exportguild`) 시에만 적용; `include_threads` StringVar 연동 |
 | `btn_export` | Button | 내보내기 실행 | - | - | 메인 액션; 실행 중 비활성화 |
 | `btn_stop` | Button | 중지 | - | - | 실행 중에만 활성화; 취소 신호 전송 |
-| `btn_open_folder` | Button | 폴더 열기 | - | - | 출력 폴더 열기 |
+| `btn_open_folder`<sup>†</sup> | Button | 폴더 열기 | - | - | 출력 폴더 열기 |
 | `channel_tree` | Treeview | 채널 목록 | - | - | 채널 조회 + 배치 선택 체크박스 |
 | `txt_log` | Text | 로그 | "" | - | 읽기 전용, 스크롤 |
-| `btn_clear_log` | Button | 로그 지우기 | - | - | 로그 초기화 |
+| `btn_clear_log`<sup>†</sup> | Button | 로그 지우기 | - | - | 로그 초기화 |
 
 > **설계 원본과의 차이**: `btn_toggle_mode`, `btn_settings`, `progress`(Progressbar)는 구현에서 제거됨.
 > `ent_channel` 단일 필드 → `ent_url` + `ent_server_id/channel_id/thread_id` 3개 독립 필드로 분리.
 > `radio_format` → `cmb_format` (Combobox, 옵션 수 4→6)으로 변경.
+>
+> <sup>†</sup> **구현 참고 (2026-07-09 Doc-Sync 재확인)**: `btn_browse_output`/`btn_open_folder`/`btn_clear_log`는
+> `gui.py`에서 라벨·동작은 표와 일치하나 `self.` 인스턴스 속성으로 저장되지 않는 익명 `ttk.Button`으로 구현되어
+> 있습니다(`self.btn_export`/`self.btn_stop`만 실제 명명된 속성으로 존재). 표의 "위젯 ID"는 기능 식별용 명칭이며
+> 코드에서 해당 이름으로 직접 접근 가능한 속성이 아님에 주의하세요.
 
 ---
 
@@ -128,7 +139,7 @@
                  │                 │
                  └────────┬────────┘
                           │
-                    [3초 후 자동]
+                    [즉시 자동]
                           │
                           ▼
                     ┌──────────────┐
@@ -149,6 +160,8 @@
 > **설계 원본과의 차이**: RUNNING 상태에서 `btn_export`가 "취소"로 변경되는 방식 대신,
 > `btn_export` 비활성화 + 별도 `btn_stop` 활성화 방식으로 구현됨.
 > `progress` Progressbar 없음; `lbl_status` Label로 상태 표시.
+> DONE/FAILED → IDLE 전환은 설계 원본의 "3초 후 자동"과 달리 **즉시** 전환됨
+> (`_set_running_state(False)` 즉시 호출; `after(3000)` 미구현).
 
 ---
 
@@ -157,10 +170,11 @@
 ### 시나리오 1: 최초 실행 → 설정 완료
 1. 사용자가 앱 실행
 2. 상태바에 "토큰: ✗ 미설정" 표시
-3. [설정] 버튼 클릭
-4. 설정 다이얼로그에서 토큰 입력 (마스킹 표시)
-5. DCE 경로 입력 또는 찾아보기
-6. [저장] 클릭 → 상태바 갱신 "토큰: ✓ 설정됨"
+3. 상태바의 "토큰 설정" 버튼 클릭 → 팝업에서 토큰 입력 (마스킹 표시) → 확인
+4. 상태바의 "찾아보기" 버튼 클릭 → 파일 다이얼로그에서 DCE 실행 파일 선택
+5. 상태바 갱신 "토큰: ✓ 설정됨" / "DCE: ✓ 설정됨"
+
+> **구현 참고**: `btn_settings`·설정 다이얼로그·[저장] 버튼은 존재하지 않음. 상태바의 "토큰 설정" + "찾아보기" 버튼으로 분리 구현됨 (헤더 주석 참조).
 
 ### 시나리오 2: URL로 채널 내보내기
 1. 채널 URL 붙여넣기: `https://discord.com/channels/123/456`
@@ -171,10 +185,11 @@
 6. [폴더 열기] 클릭하여 결과 확인
 
 ### 시나리오 3: 채널 ID로 내보내기
-1. [URL/ID 전환] 클릭하여 ID 모드로 변경
-2. 채널 ID 입력: `1459814338754773161`
-3. 출력 형식: TXT 선택
-4. [내보내기 실행] → 완료
+1. "채널 ID" 입력란에 채널 ID를 직접 입력: `1459814338754773161` (`ent_channel_id` 필드)
+2. 출력 형식: TXT 선택
+3. [내보내기 실행] → 완료
+
+> **구현 참고**: `btn_toggle_mode`(URL↔ID 전환 버튼)은 존재하지 않음. URL 입력 시 ID 필드가 자동 채워지고, 채널 ID 필드에 직접 입력도 가능함.
 
 ### 시나리오 4: 날짜 범위 지정 내보내기
 1. 채널 URL 입력
@@ -201,13 +216,13 @@
 | # | 에러 상황 | 표시 메시지 | 사용자 조치 |
 |---|----------|------------|------------|
 | E1 | 토큰 미설정 | "Discord 토큰이 설정되지 않았습니다" | [설정] 버튼 클릭 → 토큰 입력 |
-| E2 | DCE 경로 미설정 | "DCE 실행 파일 경로가 설정되지 않았습니다" | [설정] 버튼 클릭 → 경로 지정 |
+| E2 | DCE 경로 미설정 | "DCE 경로가 설정되지 않았습니다." (`validate_dce_executable()` 반환값) | [설정] 버튼 클릭 → 경로 지정 |
 | E3 | DCE 파일 없음 | "DCE 파일을 찾을 수 없습니다: [경로]" | [설정]에서 올바른 경로로 수정 |
-| E4 | 채널 ID 비어있음 | "채널 URL 또는 ID를 입력해주세요" | 채널 URL/ID 입력 |
-| E5 | 잘못된 URL 형식 | "올바른 Discord URL 형식이 아닙니다" | URL 형식 확인 후 재입력 |
-| E6 | 잘못된 채널 ID | "채널 ID는 17-20자리 숫자여야 합니다" | 올바른 채널 ID 입력 |
-| E7 | 잘못된 날짜 형식 | "날짜는 YYYY-MM-DD 형식이어야 합니다" | 날짜 형식 수정 |
-| E8 | 출력 폴더 접근 불가 | "출력 폴더에 쓰기 권한이 없습니다" | 다른 폴더 선택 또는 권한 수정 |
+| E4 | 채널 ID 비어있음 | "내보내기 대상이 없습니다.\nDiscord URL을 입력하거나 채널을 체크해주세요." (`gui.py:_validate_inputs`) | 채널 URL/ID 입력 또는 채널 목록에서 체크 |
+| E5 | 잘못된 URL 형식 | 다이얼로그 없음; `lbl_export_target`에 `"URL 오류"` 인라인 표시 (`gui.py:_on_parse_url` ValueError 처리). 이후 내보내기 클릭 시 ID 필드가 비어있으면 E4 메시지 발생 | URL 재입력 또는 채널 ID 직접 입력 |
+| E6 | 잘못된 채널 ID | `"채널 ID 오류: Channel ID should be 17-20 digits, got N digits"` (`validate_channel_id()` 영문 ValueError, `_validate_inputs`에서 `"채널 ID 오류: "` 접두어 래핑) | 올바른 채널 ID 입력 |
+| E7 | 잘못된 날짜 형식 | `"날짜 형식이 올바르지 않습니다: '{date_str}'\n올바른 형식: YYYY-MM-DD (예: 2024-01-15)"` (`utils.py:parse_date()`) | 날짜 형식 수정 |
+| E8 | 출력 폴더 접근 불가 | `"폴더에 쓰기 권한이 없습니다: {path}"` (`utils.py:validate_output_directory()`) | 다른 폴더 선택 또는 권한 수정 |
 | E9 | DCE 실행 실패 | "내보내기 실패: [마스킹된 에러]" | 로그 확인 후 설정/입력 수정 |
 | E10 | 네트워크/인증 오류 | "Discord 접근 실패. 토큰을 확인하세요" | [설정]에서 토큰 재입력 |
 
