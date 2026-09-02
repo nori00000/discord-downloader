@@ -223,8 +223,8 @@
 | E6 | 잘못된 채널 ID | `"채널 ID 오류: Channel ID should be 17-20 digits, got N digits"` (`validate_channel_id()` 영문 ValueError, `_validate_inputs`에서 `"채널 ID 오류: "` 접두어 래핑) | 올바른 채널 ID 입력 |
 | E7 | 잘못된 날짜 형식 | `"날짜 형식이 올바르지 않습니다: '{date_str}'\n올바른 형식: YYYY-MM-DD (예: 2024-01-15)"` (`utils.py:parse_date()`) | 날짜 형식 수정 |
 | E8 | 출력 폴더 접근 불가 | `"폴더에 쓰기 권한이 없습니다: {path}"` (`utils.py:validate_output_directory()`) | 다른 폴더 선택 또는 권한 수정 |
-| E9 | DCE 실행 실패 | "내보내기 실패: [마스킹된 에러]" | 로그 확인 후 설정/입력 수정 |
-| E10 | 네트워크/인증 오류 | "Discord 접근 실패. 토큰을 확인하세요" | [설정]에서 토큰 재입력 |
+| E9 | DCE 실행 실패 | 다이얼로그 제목 "내보내기 실패", 본문 `f"{error}\n\n해결 방법:\n{solution}"` (`gui.py:_on_export_error`) — `error`는 `sanitize_error_message()` 처리된 원본 메시지 | 로그 확인 후 설정/입력 수정 |
+| E10 | 네트워크/인증 오류 | E9와 동일한 다이얼로그("내보내기 실패")로 표시되며, `error`에 `parse_dce_error()`의 한국어 번역이 덧붙는다(예: unauthorized → "인증 실패: Discord 토큰이 유효하지 않습니다.", authentication → "인증 오류: Discord 토큰을 확인하세요.", connection → "연결 오류: Discord 서버에 연결할 수 없습니다." 등 매칭된 키워드별로 상이), `solution`은 `get_error_solution()` 반환값(예: unauthorized → "토큰 설정 버튼을 클릭하여 새 토큰을 입력하세요.") — 이전 문서의 고정 문자열 "Discord 접근 실패. 토큰을 확인하세요"는 코드에 존재하지 않아 2026-08-05 정정 | [설정]에서 토큰 재입력 |
 
 ### 에러 표시 방식
 - 입력 검증 에러: 해당 필드 아래에 빨간색 텍스트

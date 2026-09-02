@@ -85,9 +85,18 @@ python -m discord_exporter.gui
    - `123456789012345678901234567890` (너무 김)
 2. "내보내기 실행" 클릭
 
+> **⚠️ 주의 (코드 동작 기준, 2026-07-11 Doc-Sync 21차 확인)**:
+> `utils.py:validate_channel_id()`는 숫자 여부를 길이보다 먼저 검사합니다
+> (`isdigit()` 체크 → 길이 체크 순서). 따라서 입력값에 따라 서로 다른 메시지가 표시됩니다:
+> - `12345` / `123456789012345678901234567890` (길이만 문제, 전부 숫자) →
+>   `"채널 ID 오류: Channel ID should be 17-20 digits, got N digits"`
+> - `abc123456789012345678` (문자 포함) →
+>   `"채널 ID 오류: Channel ID must be a number, got: abc123456789012345678"`
+>   (길이 체크에 도달하지 않음)
+
 **예상 결과**:
-- [ ] "채널 ID 오류: Channel ID should be 17-20 digits, got N digits" 에러 표시 (gui.py가 영문 ValueError를 "채널 ID 오류: " 접두어로 래핑)
-- [ ] 입력된 길이 정보 포함
+- [ ] 숫자만 있으나 길이가 17-20자 범위를 벗어난 경우: "채널 ID 오류: Channel ID should be 17-20 digits, got N digits" 에러 표시 (gui.py가 영문 ValueError를 "채널 ID 오류: " 접두어로 래핑), 입력된 길이 정보 포함
+- [ ] 문자가 포함된 경우: "채널 ID 오류: Channel ID must be a number, got: {입력값}" 에러 표시 (길이 메시지 아님)
 
 ---
 
