@@ -7,6 +7,7 @@ and a path to a fake DCE script created by the `fake_dce` fixture.
 """
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -188,17 +189,23 @@ class TestExportChannelRequiresChannelId:
 
 
 class TestExportChannelMarkdown:
-    def test_explicit_json_output_is_converted_to_markdown(self, tmp_path):
-        fake_dce = tmp_path / "fake-dce"
-        fake_dce.write_text(
-            "#!/bin/sh\n"
-            "while [ \"$#\" -gt 0 ]; do\n"
-            "  if [ \"$1\" = \"-o\" ]; then output=$2; shift 2; else shift; fi\n"
-            "done\n"
-            "printf '%s' '{\"guild\": {\"name\": \"Test\"}, \"channel\": {\"name\": \"general\"}, \"messages\": []}' > \"$output\"\n"
+    def test_explicit_json_output_is_converted_to_markdown(self, tmp_path, monkeypatch):
+        runner = tmp_path / "fake_dce.py"
+        runner.write_text(
+            "import sys\n"
+            "from pathlib import Path\n"
+            "output_path = Path(sys.argv[sys.argv.index('-o') + 1])\n"
+            "output_path.write_text("
+            "'{\"guild\": {\"name\": \"Test\"}, \"channel\": {\"name\": \"general\"}, \"messages\": []}', "
+            "encoding='utf-8')\n"
         )
-        os.chmod(fake_dce, 0o755)
-        ex = _make_exporter(fake_dce)
+        ex = _make_exporter(Path(sys.executable))
+        build_command = ex._build_command
+
+        def build_runner_command(subcommand, options):
+            return [str(Path(sys.executable)), str(runner), *build_command(subcommand, options)[1:]]
+
+        monkeypatch.setattr(ex, "_build_command", build_runner_command)
         json_path = tmp_path / "new-output" / "explicit.json"
 
         result = ex.export_channel(
