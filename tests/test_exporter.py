@@ -7,6 +7,7 @@ and a path to a fake DCE script created by the `fake_dce` fixture.
 """
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -185,6 +186,40 @@ class TestExportChannelRequiresChannelId:
         ex = _make_exporter(fake_dce)
         with pytest.raises(ValueError):
             ex.export_channel(ExportOptions())
+
+
+class TestExportChannelMarkdown:
+    def test_explicit_json_output_is_converted_to_markdown(self, tmp_path, monkeypatch):
+        runner = tmp_path / "fake_dce.py"
+        runner.write_text(
+            "import sys\n"
+            "from pathlib import Path\n"
+            "output_path = Path(sys.argv[sys.argv.index('-o') + 1])\n"
+            "output_path.write_text("
+            "'{\"guild\": {\"name\": \"Test\"}, \"channel\": {\"name\": \"general\"}, \"messages\": []}', "
+            "encoding='utf-8')\n"
+        )
+        ex = _make_exporter(Path(sys.executable))
+        build_command = ex._build_command
+
+        def build_runner_command(subcommand, options):
+            return [str(Path(sys.executable)), str(runner), *build_command(subcommand, options)[1:]]
+
+        monkeypatch.setattr(ex, "_build_command", build_runner_command)
+        json_path = tmp_path / "new-output" / "explicit.json"
+
+        result = ex.export_channel(
+            ExportOptions(
+                channel_id="123456789012345678",
+                export_format=ExportFormat.MARKDOWN,
+                output_path=json_path,
+            )
+        )
+
+        assert result == json_path.with_suffix(".md")
+        assert json_path.parent.is_dir()
+        assert result.read_text(encoding="utf-8").startswith("# general")
+        assert not json_path.exists()
 
 
 class TestExportGuildRequiresGuildId:

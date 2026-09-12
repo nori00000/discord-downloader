@@ -492,6 +492,11 @@ class Exporter:
             else:
                 # Pattern: ChannelName.extension (DCE handles special chars)
                 options.output_path = output_dir / f"%C{options.export_format.get_extension()}"
+        elif is_markdown:
+            # An explicit Markdown export path is a JSON path for DCE.  Keep
+            # its validated parent available for the JSON -> Markdown
+            # post-processing.
+            output_dir = self._prepare_output_dir(Path(options.output_path).parent)
 
         callback(LogEvent(
             level=LogLevel.INFO,
