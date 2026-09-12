@@ -187,6 +187,33 @@ class TestExportChannelRequiresChannelId:
             ex.export_channel(ExportOptions())
 
 
+class TestExportChannelMarkdown:
+    def test_explicit_json_output_is_converted_to_markdown(self, tmp_path):
+        fake_dce = tmp_path / "fake-dce"
+        fake_dce.write_text(
+            "#!/bin/sh\n"
+            "while [ \"$#\" -gt 0 ]; do\n"
+            "  if [ \"$1\" = \"-o\" ]; then output=$2; shift 2; else shift; fi\n"
+            "done\n"
+            "printf '%s' '{\"guild\": {\"name\": \"Test\"}, \"channel\": {\"name\": \"general\"}, \"messages\": []}' > \"$output\"\n"
+        )
+        os.chmod(fake_dce, 0o755)
+        ex = _make_exporter(fake_dce)
+        json_path = tmp_path / "explicit.json"
+
+        result = ex.export_channel(
+            ExportOptions(
+                channel_id="123456789012345678",
+                export_format=ExportFormat.MARKDOWN,
+                output_path=json_path,
+            )
+        )
+
+        assert result == json_path.with_suffix(".md")
+        assert result.read_text(encoding="utf-8").startswith("# general")
+        assert not json_path.exists()
+
+
 class TestExportGuildRequiresGuildId:
     def test_missing_guild_id_raises(self, fake_dce):
         ex = _make_exporter(fake_dce)
