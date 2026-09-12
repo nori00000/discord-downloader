@@ -199,7 +199,7 @@ class TestExportChannelMarkdown:
         )
         os.chmod(fake_dce, 0o755)
         ex = _make_exporter(fake_dce)
-        json_path = tmp_path / "explicit.json"
+        json_path = tmp_path / "new-output" / "explicit.json"
 
         result = ex.export_channel(
             ExportOptions(
@@ -210,6 +210,7 @@ class TestExportChannelMarkdown:
         )
 
         assert result == json_path.with_suffix(".md")
+        assert json_path.parent.is_dir()
         assert result.read_text(encoding="utf-8").startswith("# general")
         assert not json_path.exists()
 
