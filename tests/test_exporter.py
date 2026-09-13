@@ -189,6 +189,96 @@ class TestExportChannelRequiresChannelId:
 
 
 class TestExportChannelMarkdown:
+    def test_default_output_ignores_preexisting_future_json(self, tmp_path, monkeypatch):
+        """Only convert and delete the JSON artifact created by this DCE run."""
+        runner = tmp_path / "fake_dce.py"
+        runner.write_text(
+            "import sys\n"
+            "from pathlib import Path\n"
+            "output_path = Path(sys.argv[sys.argv.index('-o') + 1])\n"
+            "output_path = output_path.with_name('dce-output.json')\n"
+            "output_path.write_text(\n"
+            "'{\"guild\": {\"name\": \"Test\"}, \"channel\": {\"name\": \"general\"}, \"messages\": []}', "
+            "encoding='utf-8')\n"
+        )
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        future_json = output_dir / "keep-me.json"
+        future_json.write_text('{"do": "not touch"}', encoding="utf-8")
+        future_timestamp = 4_102_444_800  # 2100-01-01 UTC
+        os.utime(future_json, (future_timestamp, future_timestamp))
+
+        ex = _make_exporter(Path(sys.executable))
+        build_command = ex._build_command
+
+        def build_runner_command(subcommand, options):
+            return [str(Path(sys.executable)), str(runner), *build_command(subcommand, options)[1:]]
+
+        monkeypatch.setattr(ex, "_build_command", build_runner_command)
+
+        result = ex.export_channel(
+            ExportOptions(
+                channel_id="123456789012345678",
+                export_format=ExportFormat.MARKDOWN,
+                output_dir=output_dir,
+            )
+        )
+
+        assert result == output_dir / "dce-output.md"
+        assert result.read_text(encoding="utf-8").startswith("# general")
+        assert not (output_dir / "dce-output.json").exists()
+        assert future_json.read_text(encoding="utf-8") == '{"do": "not touch"}'
+        assert future_json.stat().st_mtime == future_timestamp
+
+    def test_default_output_raises_when_dce_creates_no_json(self, tmp_path, monkeypatch):
+        runner = tmp_path / "fake_dce.py"
+        runner.write_text("# Pretend DCE succeeded without creating an output.\n")
+        ex = _make_exporter(Path(sys.executable))
+        build_command = ex._build_command
+
+        def build_runner_command(subcommand, options):
+            return [str(Path(sys.executable)), str(runner), *build_command(subcommand, options)[1:]]
+
+        monkeypatch.setattr(ex, "_build_command", build_runner_command)
+
+        with pytest.raises(ExportError, match="생성한 JSON 내보내기 파일을 찾을 수 없습니다"):
+            ex.export_channel(
+                ExportOptions(
+                    channel_id="123456789012345678",
+                    export_format=ExportFormat.MARKDOWN,
+                    output_dir=tmp_path / "output",
+                )
+            )
+
+    def test_default_output_raises_when_dce_creates_multiple_json_files(self, tmp_path, monkeypatch):
+        runner = tmp_path / "fake_dce.py"
+        runner.write_text(
+            "import sys\n"
+            "from pathlib import Path\n"
+            "output_path = Path(sys.argv[sys.argv.index('-o') + 1])\n"
+            "for name in ('first.json', 'second.json'):\n"
+            "    (output_path.parent / name).write_text('{}', encoding='utf-8')\n"
+        )
+        output_dir = tmp_path / "output"
+        ex = _make_exporter(Path(sys.executable))
+        build_command = ex._build_command
+
+        def build_runner_command(subcommand, options):
+            return [str(Path(sys.executable)), str(runner), *build_command(subcommand, options)[1:]]
+
+        monkeypatch.setattr(ex, "_build_command", build_runner_command)
+
+        with pytest.raises(ExportError, match="여러 개여서 변환할 수 없습니다"):
+            ex.export_channel(
+                ExportOptions(
+                    channel_id="123456789012345678",
+                    export_format=ExportFormat.MARKDOWN,
+                    output_dir=output_dir,
+                )
+            )
+        assert (output_dir / "first.json").exists()
+        assert (output_dir / "second.json").exists()
+
     def test_explicit_json_output_is_converted_to_markdown(self, tmp_path, monkeypatch):
         runner = tmp_path / "fake_dce.py"
         runner.write_text(
@@ -207,6 +297,9 @@ class TestExportChannelMarkdown:
 
         monkeypatch.setattr(ex, "_build_command", build_runner_command)
         json_path = tmp_path / "new-output" / "explicit.json"
+        json_path.parent.mkdir()
+        unrelated_json = json_path.parent / "unrelated.json"
+        unrelated_json.write_text('{"do": "not touch"}', encoding="utf-8")
 
         result = ex.export_channel(
             ExportOptions(
@@ -220,6 +313,7 @@ class TestExportChannelMarkdown:
         assert json_path.parent.is_dir()
         assert result.read_text(encoding="utf-8").startswith("# general")
         assert not json_path.exists()
+        assert unrelated_json.read_text(encoding="utf-8") == '{"do": "not touch"}'
 
 
 class TestExportGuildRequiresGuildId:
