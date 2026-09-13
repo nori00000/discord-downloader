@@ -480,6 +480,8 @@ class Exporter:
 
         # Check if Markdown conversion is needed
         is_markdown = options.export_format == ExportFormat.MARKDOWN
+        uses_default_markdown_path = is_markdown and not options.output_path
+        existing_json_paths: set[Path] = set()
 
         # Use DCE's naming pattern for readable filenames
         # %C = channel name, which includes thread/forum post titles
@@ -497,6 +499,16 @@ class Exporter:
             # its validated parent available for the JSON -> Markdown
             # post-processing.
             output_dir = self._prepare_output_dir(Path(options.output_path).parent)
+
+        if uses_default_markdown_path:
+            # DCE expands %C, so its final filename is unknown until after the
+            # export.  Record the directory contents first: a pre-existing
+            # JSON can have any mtime (including one in the future), and must
+            # never be selected for conversion or removed as a side effect.
+            # If DCE overwrites an existing path, that cannot be distinguished
+            # after the fact; leaving it out of this run's candidates still
+            # prevents this post-processing step from deleting it.
+            existing_json_paths = set(output_dir.glob("*.json"))
 
         callback(LogEvent(
             level=LogLevel.INFO,
@@ -537,25 +549,42 @@ class Exporter:
         # Convert JSON to Markdown if needed
         final_path = options.output_path
         if is_markdown:
-            # Find the actual JSON file created by DCE
-            # DCE replaces %C with actual channel name
-            json_files = list(output_dir.glob("*.json"))
-            if json_files:
-                # Get the most recently created JSON file
-                json_path = max(json_files, key=lambda p: p.stat().st_mtime)
-                md_path = json_path.with_suffix('.md')
+            if uses_default_markdown_path:
+                # Only consider files which appeared during this DCE run.
+                # This intentionally avoids using mtime as a proxy for
+                # provenance, because user files may have future timestamps.
+                json_files = [
+                    path for path in output_dir.glob("*.json")
+                    if path not in existing_json_paths
+                ]
+                if len(json_files) != 1:
+                    if not json_files:
+                        raise ExportError("DCE가 생성한 JSON 내보내기 파일을 찾을 수 없습니다.")
+                    raise ExportError(
+                        "DCE가 생성한 JSON 내보내기 파일이 여러 개여서 변환할 수 없습니다."
+                    )
+                json_path = json_files[0]
+            else:
+                # An explicit path is unambiguous and remains supported even
+                # when unrelated JSON files are present beside it.
+                json_path = Path(options.output_path)
+                if not json_path.is_file():
+                    raise ExportError("지정한 JSON 내보내기 파일을 찾을 수 없습니다.")
 
-                callback(LogEvent(
-                    level=LogLevel.INFO,
-                    message=f"Markdown 변환 중: {json_path.name} → {md_path.name}"
-                ))
+            md_path = json_path.with_suffix('.md')
 
-                convert_json_to_markdown(json_path, md_path)
+            callback(LogEvent(
+                level=LogLevel.INFO,
+                message=f"Markdown 변환 중: {json_path.name} → {md_path.name}"
+            ))
 
-                # Optionally remove the JSON file
-                json_path.unlink()
+            convert_json_to_markdown(json_path, md_path)
 
-                final_path = md_path
+            # This is either the file explicitly requested by the caller or
+            # one created during this DCE invocation.
+            json_path.unlink()
+
+            final_path = md_path
 
         callback(LogEvent(
             level=LogLevel.SUCCESS,
